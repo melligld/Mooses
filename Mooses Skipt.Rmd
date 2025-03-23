@@ -1,0 +1,75 @@
+---
+title: "Mooses Movement"
+output: html_document
+date: "2025-03-23"
+---
+
+Pakete laden
+```{r}
+library(here)
+library(readr)
+library(skimr)
+library(dplyr)
+library(tidyverse)
+```
+
+Pfad automatisch setzen 
+
+```{r}
+here::here()
+```
+Alle CSVs einlesen und zusammenfügen 
+
+```{r}
+# Ordnerpfad zu den CSV-Dateien
+data_path <- here("data")
+
+# Liste aller CSV-Dateien im data-Ordner
+csv_files <- list.files(path = data_path, pattern = "\\.csv$", full.names = TRUE)
+
+# Alle CSVs einlesen und zu einem Dataframe zusammenfügen
+moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
+
+```
+
+Anzeigen lassen welche Dateien drin sind
+```{r}
+glimpse(moose_data)
+unique(moose_data$source_file)
+
+```
+Spalten vereinfachen und umbennen
+
+```{r}
+moose_data <- moose_data %>%
+  rename(
+    lat = location.lat,
+    lon = location.long,
+    id = tag.local.identifier,
+    time = timestamp
+  ) %>%
+  select(id, time, lat, lon, everything())  # für Übersicht
+```
+
+Erste Bewegung visualisieren 
+```{r}
+library(ggplot2)
+
+ggplot(moose_data %>% filter(id == 1), aes(x = lon, y = lat)) +
+  geom_path(color = "darkgreen") +
+  labs(title = "Bewegungspfad von Elch 1", x = "Longitude", y = "Latitude") +
+  theme_minimal()
+
+
+ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
+  geom_path(alpha = 0.6) +
+  labs(title = "Bewegungspfade aller Elche", color = "Elch-ID") +
+  theme_minimal()
+
+```
+
+```{r}
+
+
+```
+

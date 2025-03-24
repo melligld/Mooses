@@ -97,6 +97,14 @@ data_path <- here("data")
 # Liste aller CSV-Dateien im data-Ordner
 csv_files <- list.files(path = data_path, pattern = "\\.csv$", full.names = TRUE)
 
+#Geschlechter Zuordnung
+sex<- read.csv("/Users/fridalode/Mooses/data/Peters_Hebblewhite_Alberta-BC_Moose-reference-data.csv")
+colnames(sex)[colnames(sex) == "animal.id"] <- "id"
+
+moose_data_sex <- moose_data %>%
+  left_join(sex[, c("id", "animal.sex")], by = "id")
+
+
 # Alle CSVs einlesen und zu einem Dataframe zusammenfügen
 moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
 

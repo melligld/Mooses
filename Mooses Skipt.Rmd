@@ -12,6 +12,7 @@ library(skimr)
 library(dplyr)
 library(tidyverse)
 library(sf)
+library(amt)
 ```
 
 # Pfad automatisch setzen 
@@ -140,9 +141,6 @@ ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
 
 ```
 
-```{r}
-Frida
-```
 
 ```{r}
 # Daten in sf-Objekt umwandeln (WGS84-Koordinatensystem)
@@ -171,5 +169,30 @@ library(rgee)
 # Einmalig initialisieren:
 ee_install()
 ee_Initialize()
+```
+
+```{r}
+#1. Dataframe mit Koordinaten erstellen
+moose_coords <- as.data.frame(st_coordinates(moose_proj))
+str(moose_coords)
+moose_proj$X <- moose_coords$X
+moose_proj$Y <- moose_coords$Y
+#remove the spatial (geometry) column-> Converts the sf object into a regular data frame
+moose_ng<- st_drop_geometry(moose_proj)
+str(moose_ng)
+#3. amt Objekt erstellen
+moose1 <- moose_ng[moose_ng$id == "1", ] 
+moose1_amt<- make_track(tbl= moose1, #make_track converts non-spatial data into a movement track object
+                         .x= X,
+                         .y= Y,
+                         .t= time,
+                         id= id, 
+                         crs= 32633)
+#4. KDE berechnen
+kde_moose1_95 <- amt::hr_kde(x = moose1_amt, levels = c(0.95))
+plot(kde_moose1_95)
+hr_area(kde_moose1_95) #82887271	
+
+
 ```
 

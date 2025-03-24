@@ -4,21 +4,90 @@ output: html_document
 date: "2025-03-23"
 ---
 
-Pakete laden
+# Pakete laden
 ```{r}
 library(here)
 library(readr)
 library(skimr)
 library(dplyr)
 library(tidyverse)
+library(sf)
 ```
 
-Pfad automatisch setzen 
+# Pfad automatisch setzen 
 
 ```{r}
 here::here()
 ```
-Alle CSVs einlesen und zusammenfügen 
+
+# Git Installieren:
+
+Git Programm herunterladen: 
+https://git-scm.com/downloads
+
+Notiz: Nach der Installation R neustarten.
+
+Git Projekt beitreten:
+Folgendem Git-Ordner beitreten und auf der Website bei GitHub anmelden (Uni-Mail)
+Benutzernamen erstellen und an Melanie schicken, damit ihr vollen Zugriff bekommt.
+
+https://github.com/melligld/Mooses
+
+Danach in R "File > New Project > Version Control > Git"
+
+Dort dann den obigen Link einfügen, damit ladet ihr den Git-Ordner herunter. 
+
+================================
+📦 Git-Workflow für das R-Projekt
+================================
+🛠 1. Git einrichten (nur einmal notwendig)
+Gebt euren Namen und eure E-Mail-Adresse an, damit eure Commits zugeordnet werden können:
+Im Terminal:
+git config --global user.name "Username"
+git config --global user.email "MaxMustermann@campus.tu-berlin.de"
+
+=====================================
+🚀 Täglicher Workflow mit Git in RStudio
+=====================================
+
+1️⃣ Vor dem Arbeiten: Änderungen von anderen holen
+(Git-Tab in RStudio → Klick auf „Pull“)
+oder im Terminal: git pull
+
+2️⃣ Dann wie gewohnt arbeiten:
+- Skripte oder Dateien ändern
+- Ergebnisse speichern
+
+3️⃣ Änderungen zum Commit auswählen:
+(Git-Tab → Häkchen bei den geänderten Dateien setzen)
+
+4️⃣ Commit erstellen:
+- Im Git-Tab Nachricht schreiben (z.B. „Analyse ergänzt“)
+- Dann auf „Commit“ klicken
+
+5️⃣ Änderungen hochladen:
+- Git-Tab → „Push“ klicken
+oder im Terminal: git push
+
+💡 Tipp: Lieber häufiger kleine Commits machen statt einen großen am Ende!
+
+=====================================
+✅ Zusammengefasst:
+=====================================
+git pull     → aktuelle Änderungen holen
+git add .    → alle Änderungen für Commit vormerken (meist über Git-Tab gemacht)
+git commit -m "Kurze Nachricht" → Änderung speichern
+git push     → Änderungen ins GitHub-Projekt hochladen
+
+=====================================
+❗️Wichtig:
+=====================================
+➤ Immer vor dem Arbeiten zuerst ein `pull` machen.
+➤ Nur pushen, wenn du committed hast und keine Konflikte offen sind.
+
+
+
+# Alle CSVs einlesen und zusammenfügen 
 
 ```{r}
 # Ordnerpfad zu den CSV-Dateien
@@ -32,13 +101,15 @@ moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
 
 ```
 
-Anzeigen lassen welche Dateien drin sind
+## Anzeigen lassen welche Dateien drin sind
+
 ```{r}
 glimpse(moose_data)
 unique(moose_data$source_file)
 
 ```
-Spalten vereinfachen und umbennen
+
+## Spalten vereinfachen und umbennen
 
 ```{r}
 moose_data <- moose_data %>%
@@ -51,7 +122,8 @@ moose_data <- moose_data %>%
   select(id, time, lat, lon, everything())  # für Übersicht
 ```
 
-Erste Bewegung visualisieren 
+## Erste Bewegung visualisieren 
+
 ```{r}
 library(ggplot2)
 
@@ -70,5 +142,34 @@ ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
 
 ```{r}
 Frida
+```
+
+```{r}
+# Daten in sf-Objekt umwandeln (WGS84-Koordinatensystem)
+moose_sf <- st_as_sf(moose_data, coords = c("lon", "lat"), crs = 4326)
+moose_proj <- st_transform(moose_sf, crs = 3395)
+
+bbox <- st_bbox(moose_proj)
+
+# In ein Rechteck umwandeln
+bbox_poly <- st_as_sfc(bbox)
+
+# Jetzt 50.000 Meter (50 km) puffern
+bbox_puffer <- st_buffer(bbox_poly, dist = 50000)
+bbox_puffer_wgs <- st_transform(bbox_puffer, crs = 4326)
+
+ggplot() +
+  geom_sf(data = bbox_puffer_wgs, fill = NA, color = "red") +
+  geom_sf(data = moose_sf, color = "blue", size = 0.5) +
+  theme_minimal()
+```
+
+```{r}
+install.packages("rgee")
+library(rgee)
+
+# Einmalig initialisieren:
+ee_install()
+ee_Initialize()
 ```
 

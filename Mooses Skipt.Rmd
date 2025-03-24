@@ -69,7 +69,6 @@ ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
 ```
 
 ```{r}
-
-
+Frida
 ```
 

@@ -291,10 +291,11 @@ moose_data_sex_area$area<- as.numeric(unlist(moose_data_sex_area$area))
 moose_data_sex_area$area<- moose_data_sex_area$area/1000000
 
 boxplot(area ~ animal.sex, data = moose_data_sex_area, 
-        ylim = c(0, 2500),
+        ylim = c(0, 2000),
         main = "Home Range Area by Sex",
         xlab = "Sex",
-        ylab = "Area (m²)")
+        ylab = "Area (m²)",
+        col= c("lightblue", "pink"))
 
 #Signifikanztest auf Unterschiede zwischen den Geschlechtern
 hist(moose_data_sex_area$area)

@@ -116,10 +116,10 @@ moose_data_sex <- moose_data %>%
 ```{r}
 glimpse(moose_data)
 unique(moose_data$source_file)
-
 ```
 
 ## Spalten vereinfachen und umbennen
+
 ```{r}
 moose_data_sex <- moose_data_sex %>%
   rename(
@@ -127,6 +127,22 @@ moose_data_sex <- moose_data_sex %>%
     lon = location.long,
     time = timestamp
   )
+```
+
+## Aufnahmezeitraum anschauen
+
+```{r}
+moose_data_sex$yearday <- yday(moose_data_sex$time)
+moose_data_sex$month   <- month(moose_data_sex$time)
+moose_data_sex$hour    <- hour(moose_data_sex$time)
+moose_data_sex$kweek   <- week(moose_data_sex$time)
+moose_data_sex$date    <- date(moose_data_sex$time)
+
+ggplot(moose_data_sex, aes(date)) +
+  geom_bar() +
+  theme_bw()
+
+ggsave("Output/moose_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 ```
 
 ## Erste Bewegung visualisieren 

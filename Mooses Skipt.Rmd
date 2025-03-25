@@ -116,10 +116,10 @@ moose_data_sex <- moose_data %>%
 ```{r}
 glimpse(moose_data)
 unique(moose_data$source_file)
+
 ```
 
 ## Spalten vereinfachen und umbennen
-
 ```{r}
 moose_data_sex <- moose_data_sex %>%
   rename(
@@ -127,22 +127,6 @@ moose_data_sex <- moose_data_sex %>%
     lon = location.long,
     time = timestamp
   )
-```
-
-## Aufnahmezeitraum anschauen
-
-```{r}
-moose_data_sex$yearday <- yday(moose_data_sex$time)
-moose_data_sex$month   <- month(moose_data_sex$time)
-moose_data_sex$hour    <- hour(moose_data_sex$time)
-moose_data_sex$kweek   <- week(moose_data_sex$time)
-moose_data_sex$date    <- date(moose_data_sex$time)
-
-ggplot(moose_data_sex, aes(date)) +
-  geom_bar() +
-  theme_bw()
-
-ggsave("Output/moose_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 ```
 
 ## Erste Bewegung visualisieren 
@@ -226,6 +210,30 @@ moose_amt<- make_track(tbl= moose_ng,
                          crs= 3978)
 kde_moose_95 <- amt::hr_kde(x = moose_amt, levels = c(0.95))
 plot(kde_moose_95)
+
+#6. KDE für jedes Tier einzeln ausgeben lassen, sortiert nach Geschlecht
+#-> Spalte mit Sex Info wieder an amt objekt anhängen
+moose_amt <- moose_amt %>%
+  left_join(moose_ng %>% select(id, animal.sex) %>% distinct(), by = "id")
+
+#in tibbel umwandeln 
+moose_amt_tbl <- as_tibble(moose_amt)
+
+#gesamtergebnisse nach individuen filteren
+kde_results <- moose_amt_tbl %>%
+  group_by(id) %>%
+  nest() %>%
+  mutate(kde = map(data, ~ hr_kde(make_track(.x, .x = x_, .y = y_, .t = t_), levels = c(0.95))))  # Convert back to track
+
+#Sex info wieder anhängen
+kde_results <- kde_results %>%
+  left_join(moose_ng %>% select(id, animal.sex) %>% distinct(), by = "id")
+
+print(kde_results)
+walk(kde_results$kde, plot)
+
+#Flächen für alle individuen anzeigen lassen
+hr_area(kde_results[kde_results$id=="1"])
 ```
 
 

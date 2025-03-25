@@ -168,14 +168,7 @@ ggplot() +
   theme_minimal()
 ```
 
-```{r}
-install.packages("rgee")
-library(rgee)
 
-# Einmalig initialisieren:
-ee_install()
-ee_Initialize()
-```
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen

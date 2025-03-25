@@ -202,9 +202,9 @@ bbox_poly <- st_as_sfc(bbox)
 # Jetzt 50.000 Meter (50 km) puffern
 bbox_puffer <- st_buffer(bbox_poly, dist = 50000)
 bbox_puffer_wgs <- st_transform(bbox_puffer, crs = 4326)
-crs(bbox_puffer)
+
 ggplot() +
-  geom_sf(data = bbox_puffer, fill = NA, color = "red") +
+  geom_sf(data = bbox_sf_proj, fill = NA, color = "red") +
   geom_sf(data = moose_proj, color = "blue", size = 0.5) +
   theme_minimal()
 ```
@@ -299,7 +299,7 @@ wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ## Kurzinfo zum Datensatz:
 
-    NALCMS 2015 Land Cover (30 m) für Kanada.
+    NALCMS 2010 Land Cover (30 m) für Kanada.
 
     Rasterdaten (GeoTIFF), 30 m Auflösung.
 
@@ -318,6 +318,107 @@ cand_Landcover_3979
 plot(cand_Landcover_3979)
 levels(cand_Landcover_3979)
 #freq(cand_Landcover_3979)
+
+# Zuordnung der Gruppen (gemäß Metadaten des Datensatzes)
+landcover_classes <- data.frame(
+  code = 1:19,
+  class = c(
+    "Temperate or sub-polar needleleaf forest",
+    "Sub-polar taiga needleleaf forest",
+    "Tropical or sub-tropical broadleaf evergreen forest",
+    "Tropical or sub-tropical broadleaf deciduous forest",
+    "Temperate or sub-polar broadleaf deciduous forest",
+    "Mixed forest",
+    "Tropical or sub-tropical shrubland",
+    "Temperate or sub-polar shrubland",
+    "Tropical or sub-tropical grassland",
+    "Temperate or sub-polar grassland",
+    "Sub-polar or polar shrubland-lichen-moss",
+    "Sub-polar or polar grassland-lichen-moss",
+    "Sub-polar or polar barren-lichen-moss",
+    "Wetland",
+    "Cropland",
+    "Barren lands",
+    "Urban and built-up",
+    "Water",
+    "Snow and ice"
+  )
+)
+
+# Zuschneiden auf das Untersuchungsgebiet: 
+
+bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
+
+cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
+
+plot(cand_Landcover_studyarea_3979)
+#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+
+writeRaster(cand_Landcover_studyarea_3979, "cand_Landcover_studyarea_3979.tif", filetype = "GTiff", overwrite = TRUE)
+```
+
+# DEM Kanda
+
+Canadian Digital Elevation Model (CDEM) – Mosaik aus Höhenrasterdaten von NRCan.
+
+Auflösung: Horizontal 10–100m, vertikale Genauigkeit 8–43m.
+
+Koordinatensystem: EPSG:4617 (geografisch), Höhenbezug EPSG:5713.
+
+Format: GeoTIFF, verfügbar als vordefiniertes oder benutzerdefiniertes Mosaik.
+
+## Datenimport
+```{r}
+library(sf)
+# Indentifizierung der Indexnummern zum Download der richtigen DEM Abschnitte
+nts_index <- st_read("data/DEM/nts_snrc_1m.shp")
+nts_index_proj <- st_transform(nts_index, crs(cand_Landcover_3979))
+
+ggplot() +
+  geom_sf(data = nts_index_proj, aes(fill = IDENTIF), color = "black", alpha = 0.4, show.legend = FALSE) +
+  geom_sf_text(data = nts_index_proj, aes(label = IDENTIF), size = 3) +
+  geom_sf(data = bbox_sf_proj, fill = NA, color = "red", linewidth = 1) +
+  theme_minimal()
+
+# Eine Stufe feiner zum Download benötigt
+nts_index_2 <- st_read("data/DEM/nts_snrc_250k.shp")
+nts_index_proj_2 <- st_transform(nts_index_2, crs(cand_Landcover_3979))
+
+# Vorbereitung zum festlegen von xlim und ylim, da gesamte Karte nicht lesbar
+bbox <- st_bbox(bbox_sf_proj)
+expand <- 10000  # in Metern (bei Projektionssystem in Meter)
+
+ggplot() +
+  geom_sf(data = nts_index_proj, aes(fill = IDENTIF), color = "black", alpha = 0.4, show.legend = FALSE) +
+  geom_sf(data = nts_index_proj_2, aes(fill = NTS_SNRC), color = "black", alpha = 0.4, show.legend = FALSE) +
+  geom_sf_text(data = nts_index_proj_2, aes(label = NTS_SNRC), size = 2) +
+  geom_sf(data = moose_sf, color = "red", size = 0.4, alpha = 0.6) +
+   geom_sf(data = bbox_sf_proj, fill = NA, color = "red", linewidth = 1) +
+  coord_sf(
+    xlim = c(bbox["xmin"] - expand, bbox["xmax"] + expand),
+    ylim = c(bbox["ymin"] - expand, bbox["ymax"] + expand)
+  ) +
+  theme_minimal()
+
+# Optische Identifizierung der DEM Abschnitte (manueller Download im FTP-Verzeichnis)
+
+# Dateipfade aller GeoTIFFs aus dem Verzeichnis holen
+dem_files <- list.files("data/DEM", pattern = "\\.tif$", full.names = TRUE)
+
+# Alle DEMs einlesen und zu einem Mosaik zusammenfügen
+dem_list <- lapply(dem_files, rast)
+dem_mosaic <- do.call(mosaic, dem_list)
+
+# Plot zur Kontrolle
+plot(dem_mosaic)
+```
+
+```{r}
+library(dplyr)
+library(lubridate)
+
+moose_13 <- moose_amt %>%
+  filter(hour(t_) == 12 & minute(t_) >= 30 | hour(t_) == 13 & minute(t_) <= 30)
 
 
 ```

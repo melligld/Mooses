@@ -202,13 +202,14 @@ bbox_poly <- st_as_sfc(bbox)
 # Jetzt 50.000 Meter (50 km) puffern
 bbox_puffer <- st_buffer(bbox_poly, dist = 50000)
 bbox_puffer_wgs <- st_transform(bbox_puffer, crs = 4326)
-
+crs(bbox_puffer)
 ggplot() +
   geom_sf(data = bbox_puffer, fill = NA, color = "red") +
   geom_sf(data = moose_proj, color = "blue", size = 0.5) +
   theme_minimal()
 ```
-
+git config --global user.email "krieger.1@campus.tu-berlinde"
+  git config --global user.name "NicoTU-byte"
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen
@@ -294,5 +295,30 @@ hist(moose_data_sex_area$area)
 wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ```
+# Landcover Daten
 
+## Kurzinfo zum Datensatz:
+
+    NALCMS 2015 Land Cover (30 m) für Kanada.
+
+    Rasterdaten (GeoTIFF), 30 m Auflösung.
+
+    Klassifiziert in 19 Landbedeckungstypen (z.B. Nadelwald, Feuchtgebiete, städtisch).
+
+    Projektion: EPSG:3979 (Lambert Conformal Conic).
+## Datenimport und erste Rasteranalyse  
+
+```{r}
+library(terra)
+
+cand_Landcover_3979 <- rast("C:/Users/Florian/Downloads/landcover-2010-classification.tif")
+
+# Übersicht
+cand_Landcover_3979
+plot(cand_Landcover_3979)
+levels(cand_Landcover_3979)
+#freq(cand_Landcover_3979)
+
+
+```
 

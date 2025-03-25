@@ -93,20 +93,24 @@ git push     → Änderungen ins GitHub-Projekt hochladen
 ```{r}
 # Ordnerpfad zu den CSV-Dateien
 data_path <- here("data")
-
+sex_data_path <- here("data", "sex_data", "Peters_Hebblewhite_Alberta-BC_Moose-reference-data.csv")
 # Liste aller CSV-Dateien im data-Ordner
 csv_files <- list.files(path = data_path, pattern = "\\.csv$", full.names = TRUE)
 
+# Alle CSVs einlesen und zu einem Dataframe zusammenfügen
+moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
+colnames(moose_data)[colnames(moose_data) == "tag.local.identifier"] <- "id"
+
 #Geschlechter Zuordnung
-sex<- read.csv("/Users/melan/OneDrive/Dokumente/Uni/Mooses movement/Mooses R/data/Peters_Hebblewhite_Alberta-BC_Moose-reference-data.csv")
+sex<- read.csv(sex_data_path)
 colnames(sex)[colnames(sex) == "animal.id"] <- "id"
 
+#Moose Datensatz mit Geschlechterzuordnung
 moose_data_sex <- moose_data %>%
   left_join(sex[, c("id", "animal.sex")], by = "id")
 
 
-# Alle CSVs einlesen und zu einem Dataframe zusammenfügen
-moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
+
 
 ```
 

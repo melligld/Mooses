@@ -251,6 +251,29 @@ kde_area_moose12 <- hr_area(kde_moose12_kde)
 ```
 
 ```{r}
+#Neuen Datensatz erstellen mit Flächenangaben und Geschlecht für Visualisierung ect.
+#Sex datensatz als basis- alle Spalten mit nur NA entfernen
+moose_data_sex_area<- sex %>%
+  select(where(~ !all(is.na(.))))
+#Area spalte aus kde_results anhängen
+moose_data_sex_area <- moose_data_sex_area %>%
+  left_join(kde_results %>% select(id, area), by = "id")
+#Bearbeitug Datensatz
+moose_data_sex_area$area<- as.numeric(moose_data_sex_area$area)
+#Individuen mit unvollständigen Daten rauslöschen
+moose_data_sex_area <- moose_data_sex_area[!moose_data_sex_area$id %in% c("9", "31"), ]
+#Area Angaben in km^2 umrechnen
+moose_data_sex_area$area<- moose_data_sex_area$area/1000000
+
+boxplot(area ~ animal.sex, data = moose_data_sex_area, 
+        ylim = c(0, 6000),
+        main = "Home Range Area by Sex",
+        xlab = "Sex",
+        ylab = "Area (m²)")
+
+#Signifikanztest auf Unterschiede zwischen den Geschlechtern
+hist(as.numeric(moose_data_sex_area$area))
+wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ```
 

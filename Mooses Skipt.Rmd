@@ -142,8 +142,6 @@ ggplot(moose_data_sex, aes(date)) +
 ggsave("Output/moose_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 
 ```
-```
-
 
 ## Erste Bewegung visualisieren 
 
@@ -210,7 +208,7 @@ moose1_amt<- make_track(tbl= moose1, #make_track converts non-spatial data into 
                          .t= time,
                          id= id, 
                          crs= 3978)
-#4. KDE berechnen
+#4. KDE berechnen FÜR EINZELNES TIER
 kde_moose1_95 <- amt::hr_kde(x = moose1_amt, levels = c(0.95))
 plot(kde_moose1_95)
 hr_area(kde_moose1_95) #82887271	
@@ -224,6 +222,7 @@ moose_amt<- make_track(tbl= moose_ng,
                          .t= time,
                          id= id, 
                          crs= 3978)
+#6. KDE Berechnung GESAMT
 kde_moose_95 <- amt::hr_kde(x = moose_amt, levels = c(0.95))
 plot(kde_moose_95)
 
@@ -249,7 +248,11 @@ print(kde_results)
 walk(kde_results$kde, plot)
 
 #Flächen für alle individuen anzeigen lassen
-hr_area(kde_results[kde_results$id=="1"])
-```
+kde_moose1 <- kde_results[kde_results$id == "1", ]
+
+
+
+
+
 
 

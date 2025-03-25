@@ -200,20 +200,21 @@ moose_proj$Y <- moose_coords$Y
 #remove the spatial (geometry) column-> Converts the sf object into a regular data frame
 moose_ng<- st_drop_geometry(moose_proj)
 str(moose_ng)
-#3. amt Objekt erstellen FÜR EINZELNES TIER
+
+#2. amt Objekt erstellen FÜR EINZELNES TIER
 moose1 <- moose_ng[moose_ng$id == "1", ] 
 moose1_amt<- make_track(tbl= moose1, #make_track converts non-spatial data into a movement track object
                          .x= X,
                          .y= Y,
                          .t= time,
                          id= id, 
-                         crs= 3978)
-#4. KDE berechnen FÜR EINZELNES TIER
+                         crs= 3979)
+#3. KDE berechnen FÜR EINZELNES TIER
 kde_moose1_95 <- amt::hr_kde(x = moose1_amt, levels = c(0.95))
 plot(kde_moose1_95)
-hr_area(kde_moose1_95) #82887271	
+hr_area(kde_moose1_95) #82887271
 
-#5. AMT Objekt erstellen für GESAMT KDE BERECHNUNG
+#4. AMT Objekt erstellen für GESAMT KDE BERECHNUNG
 moose_ng <- moose_ng %>%
   filter(!is.na(time))
 moose_amt<- make_track(tbl= moose_ng, 
@@ -221,38 +222,36 @@ moose_amt<- make_track(tbl= moose_ng,
                          .y= Y,
                          .t= time,
                          id= id, 
-                         crs= 3978)
-#6. KDE Berechnung GESAMT
+                         crs= 3979)
 kde_moose_95 <- amt::hr_kde(x = moose_amt, levels = c(0.95))
 plot(kde_moose_95)
 
-#6. KDE für jedes Tier einzeln ausgeben lassen, sortiert nach Geschlecht
-#-> Spalte mit Sex Info wieder an amt objekt anhängen
-moose_amt <- moose_amt %>%
-  left_join(moose_ng %>% select(id, animal.sex) %>% distinct(), by = "id")
-
+#KDE für jedes Tier einzeln aus "gemeinsamen" amt objekt
 #in tibbel umwandeln 
 moose_amt_tbl <- as_tibble(moose_amt)
-
 #gesamtergebnisse nach individuen filteren
 kde_results <- moose_amt_tbl %>%
   group_by(id) %>%
   nest() %>%
   mutate(kde = map(data, ~ hr_kde(make_track(.x, .x = x_, .y = y_, .t = t_), levels = c(0.95))))  # Convert back to track
-
-#Sex info wieder anhängen
-kde_results <- kde_results %>%
-  left_join(moose_ng %>% select(id, animal.sex) %>% distinct(), by = "id")
-
 print(kde_results)
 walk(kde_results$kde, plot)
 
-#Flächen für alle individuen anzeigen lassen
-kde_moose1 <- kde_results[kde_results$id == "1", ]
+#für jedes Tier ausgeben lassen
+kde_results <- kde_results %>%
+  mutate(area = map(kde, ~ hr_area(.x)$area)) 
+print(kde_results)
+walk(kde_results$area, print)
 
+#12 kontrolle
+kde_moose12 <- kde_results[kde_results$id == "12", ]
+kde_moose12 <- kde_results %>% filter(id == "12")
+kde_moose12_kde <- kde_moose12$kde[[1]]
+kde_area_moose12 <- hr_area(kde_moose12_kde)
+```
 
+```{r}
 
-
-
+```
 
 

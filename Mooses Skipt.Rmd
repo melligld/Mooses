@@ -98,7 +98,7 @@ sex_data_path <- here("data", "sex_data", "Peters_Hebblewhite_Alberta-BC_Moose-r
 csv_files <- list.files(path = data_path, pattern = "\\.csv$", full.names = TRUE)
 
 # Alle CSVs einlesen und zu einem Dataframe zusammenfügen
-moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file")
+moose_data <- purrr::map_dfr(csv_files, read_csv, .id = "source_file", show_col_types= FALSE)
 colnames(moose_data)[colnames(moose_data) == "tag.local.identifier"] <- "id"
 
 #Geschlechter Zuordnung
@@ -108,9 +108,6 @@ colnames(sex)[colnames(sex) == "animal.id"] <- "id"
 #Moose Datensatz mit Geschlechterzuordnung
 moose_data_sex <- moose_data %>%
   left_join(sex[, c("id", "animal.sex")], by = "id")
-
-
-
 
 ```
 
@@ -123,16 +120,13 @@ unique(moose_data$source_file)
 ```
 
 ## Spalten vereinfachen und umbennen
-
 ```{r}
-moose_data <- moose_data %>%
+moose_data_sex <- moose_data_sex %>%
   rename(
     lat = location.lat,
     lon = location.long,
-    id = tag.local.identifier,
     time = timestamp
-  ) %>%
-  select(id, time, lat, lon, everything())  # für Übersicht
+  )
 ```
 
 ## Erste Bewegung visualisieren 
@@ -140,13 +134,13 @@ moose_data <- moose_data %>%
 ```{r}
 library(ggplot2)
 
-ggplot(moose_data %>% filter(id == 1), aes(x = lon, y = lat)) +
+ggplot(moose_data_sex %>% filter(id == 1), aes(x = lon, y = lat)) +
   geom_path(color = "darkgreen") +
   labs(title = "Bewegungspfad von Elch 1", x = "Longitude", y = "Latitude") +
   theme_minimal()
 
 
-ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
+ggplot(moose_data_sex, aes(x = lon, y = lat, color = factor(id))) +
   geom_path(alpha = 0.6) +
   labs(title = "Bewegungspfade aller Elche", color = "Elch-ID") +
   theme_minimal()
@@ -156,7 +150,7 @@ ggplot(moose_data, aes(x = lon, y = lat, color = factor(id))) +
 
 ```{r}
 # Daten in sf-Objekt umwandeln (WGS84-Koordinatensystem)
-moose_sf <- st_as_sf(moose_data, coords = c("lon", "lat"), crs = 4326)
+moose_sf <- st_as_sf(moose_data_sex, coords = c("lon", "lat"), crs = 4326)
 moose_proj <- st_transform(moose_sf, crs = 3395)
 
 bbox <- st_bbox(moose_proj)
@@ -199,14 +193,14 @@ moose1_amt<- make_track(tbl= moose1, #make_track converts non-spatial data into 
                          .y= Y,
                          .t= time,
                          id= id, 
-                         crs= 32633)
+                         crs= 3978)
 #4. KDE berechnen
 kde_moose1_95 <- amt::hr_kde(x = moose1_amt, levels = c(0.95))
 plot(kde_moose1_95)
 hr_area(kde_moose1_95) #82887271	
-
-
 ```
+
+
 ```{r}
 #Home Range Size mit dem Minimum Convex Polygon (CMP) für Elch 3 berechnen
 

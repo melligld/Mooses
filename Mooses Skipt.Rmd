@@ -426,16 +426,15 @@ ggplot() +
 
 # Dateipfade aller GeoTIFFs aus dem Verzeichnis holen
 
-dem_files <- list.files("data/DEM", pattern = "\\.tif$", full.names = TRUE)
+#dem_files <- list.files("data/DEM", pattern = "\\.tif$", full.names = TRUE)
 
 # Alle DEMs einlesen und zu einem Mosaik zusammenfügen
 
-dem_list <- lapply(dem_files, rast)
-dem_mosaic <- do.call(mosaic, dem_list)
+#dem_list <- lapply(dem_files, rast)
+#dem_mosaic <- do.call(mosaic, dem_list)
 
 # Plot zur Kontrolle
-
-plot(dem_mosaic)
+#plot(dem_mosaic)
 
 #In das richtige CRS projezieren. ACHTUNG! - nicht erneut ausführen dauert sehr lange!:
 

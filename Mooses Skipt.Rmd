@@ -13,6 +13,7 @@ library(dplyr)
 library(tidyverse)
 library(sf)
 library(amt)
+library(terra)
 ```
 
 # Pfad automatisch setzen 
@@ -246,6 +247,7 @@ moose_amt<- make_track(tbl= moose_ng,
 kde_moose_95 <- amt::hr_kde(x = moose_amt, levels = c(0.95))
 plot(kde_moose_95)
 
+
 #KDE für jedes Tier einzeln aus "gemeinsamen" amt objekt
 #in tibbel umwandeln 
 moose_amt_tbl <- as_tibble(moose_amt)
@@ -295,31 +297,52 @@ hist(moose_data_sex_area$area)
 wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ```
+
 # Landcover Daten
 
 ## Kurzinfo zum Datensatz:
 
-    NALCMS 2010 Land Cover (30 m) für Kanada.
+    NALCMS 2010 Land Cover für Kanada.
 
     Rasterdaten (GeoTIFF), 30 m Auflösung.
 
     Klassifiziert in 19 Landbedeckungstypen (z.B. Nadelwald, Feuchtgebiete, städtisch).
 
     Projektion: EPSG:3979 (Lambert Conformal Conic).
+
 ## Datenimport und erste Rasteranalyse  
 
-```{r}
-library(terra)
+Der folgende Code-Chunk ist nicht auszuführen, da der Datensatz zu groß für das GitHub ist. Alle weiteren Schritte werden mit dem Zuschnitt auf das Untersuchungsgebiet gemacht, der Zuschnitt wird im nächsten Chunk eingeladen.
 
-cand_Landcover_3979 <- rast("C:/Users/Florian/Downloads/landcover-2010-classification.tif")
+```{r}
+#cand_Landcover_3979 <- rast("C:/Users/Florian/Downloads/landcover-2010-classification.tif")
 
 # Übersicht
-cand_Landcover_3979
-plot(cand_Landcover_3979)
-levels(cand_Landcover_3979)
+#cand_Landcover_3979
+#plot(cand_Landcover_3979)
+#levels(cand_Landcover_3979)
 #freq(cand_Landcover_3979)
 
+# Zuschneiden auf das Untersuchungsgebiet 
+
+#bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
+
+#cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
+#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+#plot(cand_Landcover_studyarea_3979)
+
+# Speichern der Datei für weitere Arbeitsschritte 
+#writeRaster(cand_Landcover_studyarea_3979, "cand_Landcover_studyarea_3979.tif", filetype = "GTiff", overwrite = TRUE)
+```
+
+## Dateiimport GitHub kompatibel
+
+Ab hier kann 
+```{r}
+cand_Landcover_studyarea_3979 <- terra::rast(here("data", "cand_Landcover_studyarea_3979.tif"))
+
 # Zuordnung der Gruppen (gemäß Metadaten des Datensatzes)
+# Für die Spätere Darstellung im GGplot
 landcover_classes <- data.frame(
   code = 1:19,
   class = c(
@@ -344,33 +367,30 @@ landcover_classes <- data.frame(
     "Snow and ice"
   )
 )
-
-# Zuschneiden auf das Untersuchungsgebiet: 
-
-bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
-
-cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
-
-plot(cand_Landcover_studyarea_3979)
-#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
-
-writeRaster(cand_Landcover_studyarea_3979, "cand_Landcover_studyarea_3979.tif", filetype = "GTiff", overwrite = TRUE)
 ```
 
 # DEM Kanda
 
-Canadian Digital Elevation Model (CDEM) – Mosaik aus Höhenrasterdaten von NRCan.
+## Kurzinfo zum Datensatz:
 
-Auflösung: Horizontal 10–100m, vertikale Genauigkeit 8–43m.
+    Canadian Digital Elevation Model (CDEM) – Mosaik aus Höhenrasterdaten von NRCan.
 
-Koordinatensystem: EPSG:4617 (geografisch), Höhenbezug EPSG:5713.
+    Auflösung: Horizontal 10–100m, vertikale Genauigkeit 8–43m.
 
-Format: GeoTIFF, verfügbar als vordefiniertes oder benutzerdefiniertes Mosaik.
+    Koordinatensystem: EPSG:4617 (geografisch), Höhenbezug EPSG:5713.
+
+    Format: GeoTIFF, verfügbar als vordefiniertes oder benutzerdefiniertes Mosaik.
 
 ## Datenimport
+
+Das Natural Resources Canada stellt die DEM kostenlos zur Verfügung, folgenden Video erklärt den Daten-Download:
+https://www.youtube.com/watch?v=dfHNghqHdXI&ab_channel=DonBoyes
+
 ```{r}
-library(sf)
 # Indentifizierung der Indexnummern zum Download der richtigen DEM Abschnitte
+# Die Zuordnung der Indexnummern ist als shape Datei zu downloaden:
+# https://open.canada.ca/data/en/dataset/7f245e4d-76c2-4caa-951a-45d1d2051333
+
 nts_index <- st_read("data/DEM/nts_snrc_1m.shp")
 nts_index_proj <- st_transform(nts_index, crs(cand_Landcover_3979))
 
@@ -381,12 +401,16 @@ ggplot() +
   theme_minimal()
 
 # Eine Stufe feiner zum Download benötigt
+
 nts_index_2 <- st_read("data/DEM/nts_snrc_250k.shp")
 nts_index_proj_2 <- st_transform(nts_index_2, crs(cand_Landcover_3979))
 
-# Vorbereitung zum festlegen von xlim und ylim, da gesamte Karte nicht lesbar
+# Vorbereitung zum festlegen von xlim und ylim, da Indexnummern im 1. Versuch auf der Karte nicht lesbar
+
 bbox <- st_bbox(bbox_sf_proj)
 expand <- 10000  # in Metern (bei Projektionssystem in Meter)
+
+# Optische Identifizierung der DEM Abschnitte (Anschließend: manueller Download im FTP-Verzeichnis)
 
 ggplot() +
   geom_sf(data = nts_index_proj, aes(fill = IDENTIF), color = "black", alpha = 0.4, show.legend = FALSE) +
@@ -400,59 +424,68 @@ ggplot() +
   ) +
   theme_minimal()
 
-# Optische Identifizierung der DEM Abschnitte (manueller Download im FTP-Verzeichnis)
-
 # Dateipfade aller GeoTIFFs aus dem Verzeichnis holen
+
 dem_files <- list.files("data/DEM", pattern = "\\.tif$", full.names = TRUE)
 
 # Alle DEMs einlesen und zu einem Mosaik zusammenfügen
+
 dem_list <- lapply(dem_files, rast)
 dem_mosaic <- do.call(mosaic, dem_list)
 
 # Plot zur Kontrolle
+
 plot(dem_mosaic)
 
-dem_mosaic_3979 <- project(dem_mosaic, cand_Landcover_3979)
+#In das richtige CRS projezieren. ACHTUNG! - nicht erneut ausführen dauert sehr lange!:
 
-dem_studyarea <- crop(dem_mosaic_3979, bbox_sf_proj)
+#dem_mosaic_3979 <- project(dem_mosaic, cand_Landcover_3979)
+#dem_studyarea <- crop(dem_mosaic_3979, bbox_sf_proj)
+#writeRaster(dem_studyarea, "data/DEM/dem_studyarea_3979.tif",
+#            filetype = "GTiff",
+#            wopt = list(gdal = c("COMPRESS=LZW")),
+#            overwrite = TRUE)
 
-writeRaster(dem_studyarea, "data/DEM/dem_studyarea_3979.tif",
-            filetype = "GTiff",
-            wopt = list(gdal = c("COMPRESS=LZW")),
-            overwrite = TRUE)
+# Auch die komprimierte Datei ist zu groß für GitHUB (daher manueller download und einfügen in die Ordnerstruktur)
 
+dem_studyarea_3979 <- terra::rast(here("data", "DEM", "dem_studyarea_3979.tif"))
 ```
 
 # Resource selection funciton
 
-## Datensatz auf einen Ort pro Tag begrenzen. 
-Auswahl um die Mittagsaufnahme 13 Uhr (Abdeckung der Tagesaktivität im Umkreis wahrscheinlich)
-```{r}
-library(dplyr)
-library(lubridate)
-#Filter nach Aufnahmezeitpunkt um 13 Uhr
-moose_13 <- moose_amt %>%
-  filter(hour(t_) == 12 & minute(t_) >= 30 | hour(t_) == 13 & minute(t_) <= 30)
-```
+## Vorbereitung des Umweltvariablen-Stacks für die RSF
 
 ```{r}
-# Prüfen ob gleiche Auflösung, Extent & CRS – ggf. anpassen
-cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_mosaic_3979, method = "near")
-dem_mosaic_scaled <- scale(dem_mosaic_3979)
+# Landcover-Raster wird auf die Auflösung des DEM resampled (nearest neighbor für kategoriale Daten)
 
-writeRaster(dem_mosaic_scaled, "data/DEM/dem_mosaic_scaled.tif",
-            filetype = "GTiff",
-            wopt = list(gdal = c("COMPRESS=LZW")),
-            overwrite = TRUE)
+cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_3979, method = "near")
+
+# DEM wird standardisiert (z-transformiert) - Auch nicht unbedingt nochmal ausführen.
+# dem_mosaic_scaled <- scale(dem_studyarea_3979)
+# Skalierter DEM wird komprimiert als GeoTIFF gespeichert und erneut eingelesen
+# writeRaster(dem_mosaic_scaled, "data/DEM/dem_studyarea_scaled.tif",
+#          filetype = "GTiff",
+#          wopt = list(gdal = c("COMPRESS=LZW")),
+#          overwrite = TRUE)
+
+# Datei zu groß für GitHub, kombrimierte Datei manuell downloaden und in Ordnerstruktur einfügen.
+
+dem_mosaic_scaled <- terra::rast(here("data", "DEM", "dem_mosaic_scaled.tif"))
 
 # Stack aus beiden Rastern
+
 rsf_stack <- c(cand_Landcover_aligned, dem_mosaic_scaled)
 names(rsf_stack) <- c("landcover", "elevation")
 
 # Kontrolle
+
 plot(rsf_stack)
 
 ```
+
+## Kontrolle auf Korrelation 
+(unsicher wie nötig dieser Test hier ist)
+
 ```{r}
 library(corrplot)
 
@@ -461,88 +494,149 @@ M <- terra::layerCor(rsf_stack, fun = "pearson")
 
 # Plot der Korrelationsmatrix
 corrplot(M$correlation, type = "upper", tl.col = "black", tl.srt = 45)
-
 ```
 
+## Vorbereitung zur Erstellung der Random-Points
 
+1. Reduzierung des Datensatz: Die nächstgelegende Aufnahme zu 13 Uhr!
+2. Vorbereitung der KDE (Home Ranges)
+3. Hinzufügen der Random-Points
 ```{r}
-# IDs bestimmen
-moose_ids <- unique(moose_ng$id)
+#Kontrolle wie viele Datenpunkte pro ID enthalten sind
+table(moose_amt$id)
 
-# Liste zum Speichern
-kde_list_new <- list()
-
-# Saubere KDE-Berechnung mit Fehlerbehandlung
-for (id in moose_ids) {
-  cat("Berechne KDE für ID:", id, "\n")
-  
-  df <- moose_ng %>% filter(id == !!id)
-  
-  if (nrow(df) < 5) {
-    message("Zu wenige Punkte für ID: ", id)
-    next
-  }
-
-  df <- df %>% filter(!is.na(time))  # Neue Zeile!
-  
-  if (nrow(df) < 5) {
-    message("Zu wenige gültige Zeitpunkte für ID: ", id)
-    next
-  }
-  
-  track <- make_track(df, .x = X, .y = Y, .t = time, id = id, crs = 3979)
-  
-  kde <- tryCatch({
-    hr_kde(track, levels = 0.95)
-  }, error = function(e) {
-    message("Fehler bei ID ", id, ": ", e$message)
-    return(NULL)
-  })
-  
-  if (!is.null(kde)) {
-    terra::crs(kde$ud) <- "EPSG:3979"
-    terra::crs(kde$trast) <- "EPSG:3979"
-  }
-  
-  kde_list_new[[as.character(id)]] <- kde
+#Funktion für Punkt 1 (Individum bezogen)
+get_daily_near13 <- function(df) {
+  df %>%
+    mutate(date = as.Date(t_),
+           diff_13 = abs(lubridate::hour(t_) + lubridate::minute(t_) / 60 - 13)) %>%
+    group_by(id, date) %>%
+    slice_min(order_by = diff_13, with_ties = FALSE) %>%
+    ungroup()
 }
 
+# Ausführung der Funktion
+moose_13 <- get_daily_near13(moose_amt)
 
-class(kde_list_new[["12"]])
-plot(kde_list_new[["25"]])
-hr_area(kde_list_new[["12"]])
+# Kontrolle, wie viele Datenpunkte pro Tier geblieben sind
+table(moose_13$id)
 
+# Vorbereitung der KDE (Polygone für Punkterzeugung)
+kde_results <- kde_results %>%
+  mutate(poly_95 = map(kde, ~ hr_isopleths(.x)))
+
+# Kontrolle ob für jedes Tier ein Polygon vorhanden ist
+kde_results %>%
+  mutate(valid_poly = map_lgl(poly_95, ~ !is.null(.x) && nrow(.x) > 0)) %>%
+  count(valid_poly)
+
+# Erstellung der Punkte
+kde_randompoints <- kde_results %>%
+  filter(id %in% moose_13$id) %>%
+  transmute(id, random_points = map2(poly_95, id, ~ st_sample(.x, 
+    size = sum(moose_13$id == .y) * 20, type = "random")))
+
+# Kontrolle wie viele Punkte es sind
+kde_randompoints %>%
+  mutate(n_random = map_int(random_points, length)) %>%
+  select(id, n_random)
 
 ```
+## Umweltvariablen für die Punkte extrahieren
 
+###Ablauftest für ein Individuum zur Vorbereitung einer Funktion
 ```{r}
-moose_coords <- as.data.frame(st_coordinates(moose_proj))
-moose_proj$X <- moose_coords$X
-moose_proj$Y <- moose_coords$Y
-moose_ng <- st_drop_geometry(moose_proj) 
 
-# amt-kompatibles Track-Objekt
-moose12 <- moose_ng %>%
-  filter(id == "12") %>%
-  filter(lubridate::hour(time) == 12 & lubridate::minute(time) >= 30 |
-         lubridate::hour(time) == 13 & lubridate::minute(time) <= 30)
+# 1. Geometrie holen und in sf-Objekt umwandeln
+rp_sf_1 <- st_as_sf(kde_randompoints$random_points[[1]])
 
-# Jetzt klappt's:
-my_moose_12 <- make_track(moose12, .x = X, .y = Y, .t = time, id = id, crs = 3979)
+# 2. Koordinaten extrahieren
+coords <- st_coordinates(rp_sf_1)
 
-# KDE aus der neuen Liste
-kde_12 <- kde_list_new[["12"]]
-class(kde_12) <- c("hr_kde", "hr_prob", "hr", "list")
-# Random Points innerhalb der KDE
-rp_moose_12 <- random_points(my_moose_12, n = nrow(my_moose_12), hr = kde_12)
-
-# Zusammenführen zu RSF-Daten
-rsf_12 <- bind_rows(
-  mutate(my_moose_12, case_ = TRUE),
-  mutate(rp_moose_12, case_ = FALSE)
+# 3. Track-Objekt erstellen
+rp_track_1 <- make_track(
+  tbl = tibble(x = coords[,1], y = coords[,2], id = "1"),
+  .x = x, .y = y, id = id, crs = 3979
 )
 
+# 4. Extraktion
+env_rp_1 <- extract_covariates(rp_track_1, rsf_stack)
 ```
 
 
+### Funktion zur Extraktion der Habitatvariablen (TRUE und Random Points)
+```{r}
+env_all_list <- list()
+
+for (i in seq_len(nrow(kde_randompoints))) {
+  id <- kde_randompoints$id[i]
+  geom <- kde_randompoints$random_points[[i]]
+  
+  # Random Points zu Koordinaten
+  coords <- st_coordinates(geom)
+  rp_tbl <- tibble(x = coords[,1], y = coords[,2], id = id)
+  rp_track <- make_track(rp_tbl, .x = x, .y = y, id = id, crs = 3979)
+  env_rp <- extract_covariates(rp_track, rsf_stack)
+  env_rp$case_ <- FALSE
+  
+  # True Points
+  moose_df <- moose_13 %>% filter(id == !!id)
+  moose_track <- make_track(moose_df, .x = x_, .y = y_, .t = t_, id = id, crs = 3979)
+  env_true <- extract_covariates(moose_track, rsf_stack)
+  env_true$case_ <- TRUE
+  
+  # Kombinieren
+  env_all_list[[as.character(id)]] <- bind_rows(env_true, env_rp)
+}
+```
+
+# Resource selection function
+
+GLMM (binomial, logit-Link) mit:
+
+    festen Effekten: elevation + landcover
+
+    Zufallsinterzept für id → erlaubt individuelle Variation je Elch
+    
+```{r}
+# Vorbereitung der Daten für das GLMM
+rsf_df <- bind_rows(env_all_list)
+rsf_df$case_ <- as.integer(rsf_df$case_)  # TRUE/FALSE → 1/0
+
+# Anwednung GLMM
+library(lme4)
+model_glmm <- glmer(case_ ~ elevation + as.factor(landcover) + (1 | id),
+                    data = rsf_df,
+                    family = binomial)
+
+# Ergebniszusammenfassung
+summary(model_glmm)
+```
+
+# Visualisierung der Ergebnisse
+```{r}
+# 1. Effekt-Koeffizienten extrahieren
+coefs <- summary(model_glmm)$coefficients %>%
+  as.data.frame() %>%
+  rownames_to_column("term") %>%
+  filter(term == "elevation" | grepl("as.factor\\(landcover\\)", term)) %>%
+  mutate(
+    landcover_code = as.numeric(gsub("as.factor\\(landcover\\)", "", term)),
+    class = ifelse(term == "elevation", "Elevation", landcover_classes$class[match(landcover_code, landcover_classes$code)]),
+    lower = Estimate - 1.96 * `Std. Error`,
+    upper = Estimate + 1.96 * `Std. Error`
+  ) %>%
+  filter(abs(Estimate) < 10)  # entfernt Extremwerte
+
+
+# 2. Plot
+ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  labs(x = "Variable", y = "Effekt (log-Odds)",
+       title = "RSF-Modell: Effekte von Höhe & Landnutzung") +
+  theme_minimal()
+```
 

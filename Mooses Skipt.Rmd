@@ -645,4 +645,17 @@ ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
        title = "RSF-Modell: Effekte von Höhe & Landnutzung") +
   theme_minimal()
 ```
+```{r}
+ranef_df <- ranef(model_glmm)$id %>%
+  tibble::rownames_to_column("id") %>%
+  rename(intercept = `(Intercept)`)
+
+ggplot(ranef_df, aes(x = reorder(id, intercept), y = intercept)) +
+  geom_col(fill = "steelblue") +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  labs(x = "Individuum (ID)", y = "Zufälliger Interzept",
+       title = "Individuelle Abweichung im RSF (Random Intercepts)") +
+  theme_minimal()
+
+```
 

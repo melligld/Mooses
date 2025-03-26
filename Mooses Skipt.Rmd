@@ -392,7 +392,7 @@ ggplot() +
   geom_sf(data = nts_index_proj, aes(fill = IDENTIF), color = "black", alpha = 0.4, show.legend = FALSE) +
   geom_sf(data = nts_index_proj_2, aes(fill = NTS_SNRC), color = "black", alpha = 0.4, show.legend = FALSE) +
   geom_sf_text(data = nts_index_proj_2, aes(label = NTS_SNRC), size = 2) +
-  geom_sf(data = moose_sf, color = "red", size = 0.4, alpha = 0.6) +
+  geom_sf(data = moose_proj, color = "red", size = 0.4, alpha = 0.6) +
    geom_sf(data = bbox_sf_proj, fill = NA, color = "red", linewidth = 1) +
   coord_sf(
     xlim = c(bbox["xmin"] - expand, bbox["xmax"] + expand),
@@ -411,15 +411,138 @@ dem_mosaic <- do.call(mosaic, dem_list)
 
 # Plot zur Kontrolle
 plot(dem_mosaic)
+
+dem_mosaic_3979 <- project(dem_mosaic, cand_Landcover_3979)
+
+dem_studyarea <- crop(dem_mosaic_3979, bbox_sf_proj)
+
+writeRaster(dem_studyarea, "data/DEM/dem_studyarea_3979.tif",
+            filetype = "GTiff",
+            wopt = list(gdal = c("COMPRESS=LZW")),
+            overwrite = TRUE)
+
 ```
 
+# Resource selection funciton
+
+## Datensatz auf einen Ort pro Tag begrenzen. 
+Auswahl um die Mittagsaufnahme 13 Uhr (Abdeckung der Tagesaktivität im Umkreis wahrscheinlich)
 ```{r}
 library(dplyr)
 library(lubridate)
-
+#Filter nach Aufnahmezeitpunkt um 13 Uhr
 moose_13 <- moose_amt %>%
   filter(hour(t_) == 12 & minute(t_) >= 30 | hour(t_) == 13 & minute(t_) <= 30)
+```
+
+```{r}
+# Prüfen ob gleiche Auflösung, Extent & CRS – ggf. anpassen
+cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_mosaic_3979, method = "near")
+dem_mosaic_scaled <- scale(dem_mosaic_3979)
+
+writeRaster(dem_mosaic_scaled, "data/DEM/dem_mosaic_scaled.tif",
+            filetype = "GTiff",
+            wopt = list(gdal = c("COMPRESS=LZW")),
+            overwrite = TRUE)
+
+# Stack aus beiden Rastern
+rsf_stack <- c(cand_Landcover_aligned, dem_mosaic_scaled)
+names(rsf_stack) <- c("landcover", "elevation")
+
+# Kontrolle
+plot(rsf_stack)
+
+```
+```{r}
+library(corrplot)
+
+# Korrelation berechnen
+M <- terra::layerCor(rsf_stack, fun = "pearson")
+
+# Plot der Korrelationsmatrix
+corrplot(M$correlation, type = "upper", tl.col = "black", tl.srt = 45)
+
+```
+
+
+```{r}
+# IDs bestimmen
+moose_ids <- unique(moose_ng$id)
+
+# Liste zum Speichern
+kde_list_new <- list()
+
+# Saubere KDE-Berechnung mit Fehlerbehandlung
+for (id in moose_ids) {
+  cat("Berechne KDE für ID:", id, "\n")
+  
+  df <- moose_ng %>% filter(id == !!id)
+  
+  if (nrow(df) < 5) {
+    message("Zu wenige Punkte für ID: ", id)
+    next
+  }
+
+  df <- df %>% filter(!is.na(time))  # Neue Zeile!
+  
+  if (nrow(df) < 5) {
+    message("Zu wenige gültige Zeitpunkte für ID: ", id)
+    next
+  }
+  
+  track <- make_track(df, .x = X, .y = Y, .t = time, id = id, crs = 3979)
+  
+  kde <- tryCatch({
+    hr_kde(track, levels = 0.95)
+  }, error = function(e) {
+    message("Fehler bei ID ", id, ": ", e$message)
+    return(NULL)
+  })
+  
+  if (!is.null(kde)) {
+    terra::crs(kde$ud) <- "EPSG:3979"
+    terra::crs(kde$trast) <- "EPSG:3979"
+  }
+  
+  kde_list_new[[as.character(id)]] <- kde
+}
+
+
+class(kde_list_new[["12"]])
+plot(kde_list_new[["25"]])
+hr_area(kde_list_new[["12"]])
 
 
 ```
+
+```{r}
+moose_coords <- as.data.frame(st_coordinates(moose_proj))
+moose_proj$X <- moose_coords$X
+moose_proj$Y <- moose_coords$Y
+moose_ng <- st_drop_geometry(moose_proj) 
+
+# amt-kompatibles Track-Objekt
+moose12 <- moose_ng %>%
+  filter(id == "12") %>%
+  filter(lubridate::hour(time) == 12 & lubridate::minute(time) >= 30 |
+         lubridate::hour(time) == 13 & lubridate::minute(time) <= 30)
+
+# Jetzt klappt's:
+my_moose_12 <- make_track(moose12, .x = X, .y = Y, .t = time, id = id, crs = 3979)
+
+# KDE aus der neuen Liste
+kde_12 <- kde_list_new[["12"]]
+class(kde_12) <- c("hr_kde", "hr_prob", "hr", "list")
+# Random Points innerhalb der KDE
+rp_moose_12 <- random_points(my_moose_12, n = nrow(my_moose_12), hr = kde_12)
+
+# Zusammenführen zu RSF-Daten
+rsf_12 <- bind_rows(
+  mutate(my_moose_12, case_ = TRUE),
+  mutate(rp_moose_12, case_ = FALSE)
+)
+
+```
+
+
 

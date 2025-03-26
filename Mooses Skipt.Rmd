@@ -203,6 +203,7 @@ bbox_poly <- st_as_sfc(bbox)
 # Jetzt 50.000 Meter (50 km) puffern
 bbox_puffer <- st_buffer(bbox_poly, dist = 50000)
 bbox_puffer_wgs <- st_transform(bbox_puffer, crs = 4326)
+bbox_sf_proj <- st_transform(bbox_puffer, crs = 3979)
 
 ggplot() +
   geom_sf(data = bbox_sf_proj, fill = NA, color = "red") +
@@ -392,7 +393,7 @@ https://www.youtube.com/watch?v=dfHNghqHdXI&ab_channel=DonBoyes
 # https://open.canada.ca/data/en/dataset/7f245e4d-76c2-4caa-951a-45d1d2051333
 
 nts_index <- st_read("data/DEM/nts_snrc_1m.shp")
-nts_index_proj <- st_transform(nts_index, crs(cand_Landcover_3979))
+nts_index_proj <- st_transform(nts_index, crs = 3979)
 
 ggplot() +
   geom_sf(data = nts_index_proj, aes(fill = IDENTIF), color = "black", alpha = 0.4, show.legend = FALSE) +
@@ -403,7 +404,7 @@ ggplot() +
 # Eine Stufe feiner zum Download benötigt
 
 nts_index_2 <- st_read("data/DEM/nts_snrc_250k.shp")
-nts_index_proj_2 <- st_transform(nts_index_2, crs(cand_Landcover_3979))
+nts_index_proj_2 <- st_transform(nts_index_2, crs = 3979)
 
 # Vorbereitung zum festlegen von xlim und ylim, da Indexnummern im 1. Versuch auf der Karte nicht lesbar
 
@@ -469,11 +470,11 @@ cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_
 
 # Datei zu groß für GitHub, kombrimierte Datei manuell downloaden und in Ordnerstruktur einfügen.
 
-dem_mosaic_scaled <- terra::rast(here("data", "DEM", "dem_mosaic_scaled.tif"))
+dem_studyarea_scaled <- terra::rast(here("data", "DEM", "dem_studyarea_scaled.tif"))
 
 # Stack aus beiden Rastern
 
-rsf_stack <- c(cand_Landcover_aligned, dem_mosaic_scaled)
+rsf_stack <- c(cand_Landcover_aligned, dem_studyarea_scaled)
 names(rsf_stack) <- c("landcover", "elevation")
 
 # Kontrolle
@@ -610,6 +611,12 @@ model_glmm <- glmer(case_ ~ elevation + as.factor(landcover) + (1 | id),
 
 # Ergebniszusammenfassung
 summary(model_glmm)
+
+# Speichern des fertigen GLMM-Objekts
+saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
+
+# Einlesen bei späterer Nutzung
+#model_glmm <- readRDS("results/model_glmm.rds")
 ```
 
 # Visualisierung der Ergebnisse

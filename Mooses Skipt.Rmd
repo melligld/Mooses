@@ -210,8 +210,6 @@ ggplot() +
   geom_sf(data = moose_proj, color = "blue", size = 0.5) +
   theme_minimal()
 ```
-git config --global user.email "krieger.1@campus.tu-berlinde"
-  git config --global user.name "NicoTU-byte"
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen
@@ -329,7 +327,7 @@ Der folgende Code-Chunk ist nicht auszuführen, da der Datensatz zu groß für d
 #bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
 
 #cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
-#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
 #plot(cand_Landcover_studyarea_3979)
 
 # Speichern der Datei für weitere Arbeitsschritte 
@@ -368,6 +366,9 @@ landcover_classes <- data.frame(
     "Snow and ice"
   )
 )
+
+
+plot(cand_Landcover_studyarea_3979)
 ```
 
 # DEM Kanda
@@ -434,9 +435,6 @@ ggplot() +
 #dem_list <- lapply(dem_files, rast)
 #dem_mosaic <- do.call(mosaic, dem_list)
 
-# Plot zur Kontrolle
-#plot(dem_mosaic)
-
 #In das richtige CRS projezieren. ACHTUNG! - nicht erneut ausführen dauert sehr lange!:
 
 #dem_mosaic_3979 <- project(dem_mosaic, cand_Landcover_3979)
@@ -447,8 +445,12 @@ ggplot() +
 #            overwrite = TRUE)
 
 # Auch die komprimierte Datei ist zu groß für GitHUB (daher manueller download und einfügen in die Ordnerstruktur)
-
 dem_studyarea_3979 <- terra::rast(here("data", "DEM", "dem_studyarea_3979.tif"))
+
+# Plot zur Kontrolle
+plot(dem_studyarea_3979)
+
+
 ```
 
 # Resource selection funciton
@@ -644,7 +646,10 @@ ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
   labs(x = "Variable", y = "Effekt (log-Odds)",
        title = "RSF-Modell: Effekte von Höhe & Landnutzung") +
   theme_minimal()
+
+ggsave("RSF Model Values.png", width = 8, height = 6, dpi = 300)
 ```
+
 ```{r}
 ranef_df <- ranef(model_glmm)$id %>%
   tibble::rownames_to_column("id") %>%
@@ -658,4 +663,5 @@ ggplot(ranef_df, aes(x = reorder(id, intercept), y = intercept)) +
   theme_minimal()
 
 ```
+
 

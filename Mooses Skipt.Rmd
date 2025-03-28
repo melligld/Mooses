@@ -5,6 +5,7 @@ date: "2025-03-23"
 ---
 
 # Pakete laden
+
 ```{r}
 library(here)
 library(readr)
@@ -18,11 +19,15 @@ library(terra)
 
 # Pfad automatisch setzen 
 
+GitHub Ordnerstruktur
+
 ```{r}
 here::here()
 ```
 
-# Git Installieren:
+# Vorbereitung Gruppenarbeit Workflow
+
+## Git Installieren:
 
 Git Programm herunterladen: 
 https://git-scm.com/downloads
@@ -87,9 +92,9 @@ git push     → Änderungen ins GitHub-Projekt hochladen
 ➤ Immer vor dem Arbeiten zuerst ein `pull` machen.
 ➤ Nur pushen, wenn du committed hast und keine Konflikte offen sind.
 
+# GPS Telemetry Daten (Elche)
 
-
-# Alle CSVs einlesen und zusammenfügen 
+## Alle CSVs einlesen und zusammenfügen 
 
 ```{r}
 # Ordnerpfad zu den CSV-Dateien
@@ -111,7 +116,9 @@ moose_data_sex1 <- moose_data %>%
   left_join(sex[, c("id", "animal.sex")], by = "id")
 
 ```
-##Datensatz "beschneiden"
+
+## Datensatz "beschneiden"
+
 ```{r}
 #1. Gruppe A (Datenerhebungszeitraum 2008-2009) in eigenen Datensatz 
 moose_A <- moose_data_sex1[moose_data_sex1$id %in% c("1", "3", "5", "10"), ]
@@ -133,17 +140,16 @@ head(moose_comb)
 sex<- sex[!sex$id %in% c("31", "9"), ]
 ```
 
-
-
-## Anzeigen lassen welche Dateien drin sind
+## Datenüberblick
 
 ```{r}
 glimpse(moose_data)
 unique(moose_data$source_file)
-
+skim(moose_data)
 ```
 
-## Spalten vereinfachen und umbennen und NA raus löschen
+## 1. Datenbereinigung und Vorbereitung
+
 ```{r}
 moose_data_sex <- moose_comb %>%
   rename(
@@ -157,18 +163,34 @@ moose_data_sex <- moose_data_sex %>%
   filter(!is.na(lon))
 ```
 
-```{r}
 ## Aufnahmezeitraum anschauen
+
+```{r}
+# Gesamter Datensatz
+moose_data$yearday <- yday(moose_data$timestamp)
+moose_data$month   <- month(moose_data$timestamp)
+moose_data$hour    <- hour(moose_data$timestamp)
+moose_data$kweek   <- week(moose_data$timestamp)
+moose_data$date    <- date(moose_data$timestamp)
+
+ggplot(moose_data, aes(date)) +
+  geom_bar() +
+  theme_bw()
+
+ggsave("Output/moose_complete_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
+
+# Bereinigter Datensatz
 moose_data_sex$yearday <- yday(moose_data_sex$time)
 moose_data_sex$month   <- month(moose_data_sex$time)
 moose_data_sex$hour    <- hour(moose_data_sex$time)
 moose_data_sex$kweek   <- week(moose_data_sex$time)
 moose_data_sex$date    <- date(moose_data_sex$time)
+
 ggplot(moose_data_sex, aes(date)) +
   geom_bar() +
   theme_bw()
-ggsave("Output/moose_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 
+ggsave("Output/moose_adjusted_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 ```
 
 ## Erste Bewegung visualisieren 
@@ -189,7 +211,9 @@ ggplot(moose_data_sex, aes(x = lon, y = lat, color = factor(id))) +
 
 ```
 
+## Untersuchungsgebiet festlegen
 
+Zu einfacheren Bearbeitung der Habitatvariablen legen wir ein UG anhand der GPS-Punkte fest.
 ```{r}
 # Daten in sf-Objekt umwandeln (WGS84-Koordinatensystem)
 moose_sf <- st_as_sf(moose_data_sex, coords = c("lon", "lat"), crs = 4326)
@@ -210,6 +234,8 @@ ggplot() +
   geom_sf(data = moose_proj, color = "blue", size = 0.5) +
   theme_minimal()
 ```
+
+# Kernel desity estimation
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen
@@ -271,6 +297,8 @@ kde_moose12_kde <- kde_moose12$kde[[1]]
 kde_area_moose12 <- hr_area(kde_moose12_kde)
 ```
 
+## Vergleich KDE Weibchen / Männchen
+
 ```{r}
 #Neuen Datensatz erstellen mit Flächenangaben und Geschlecht für Visualisierung ect.
 #Sex datensatz als basis- alle Spalten mit nur NA entfernen
@@ -327,7 +355,7 @@ Der folgende Code-Chunk ist nicht auszuführen, da der Datensatz zu groß für d
 #bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
 
 #cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
-freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
 #plot(cand_Landcover_studyarea_3979)
 
 # Speichern der Datei für weitere Arbeitsschritte 
@@ -336,7 +364,7 @@ freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Land
 
 ## Dateiimport GitHub kompatibel
 
-Ab hier kann 
+Ab hier können die Rasterdaten als Zuschnitt auf das Untersuchungsgebiet über das GitHub eingeladen werden. 
 ```{r}
 cand_Landcover_studyarea_3979 <- terra::rast(here("data", "cand_Landcover_studyarea_3979.tif"))
 
@@ -453,7 +481,7 @@ plot(dem_studyarea_3979)
 
 ```
 
-# Resource selection funciton
+# Resource selection function
 
 ## Vorbereitung des Umweltvariablen-Stacks für die RSF
 
@@ -462,6 +490,7 @@ plot(dem_studyarea_3979)
 
 cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_3979, method = "near")
 
+plot(cand_Landcover_aligned)
 # DEM wird standardisiert (z-transformiert) - Auch nicht unbedingt nochmal ausführen.
 # dem_mosaic_scaled <- scale(dem_studyarea_3979)
 # Skalierter DEM wird komprimiert als GeoTIFF gespeichert und erneut eingelesen
@@ -473,7 +502,7 @@ cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_
 # Datei zu groß für GitHub, kombrimierte Datei manuell downloaden und in Ordnerstruktur einfügen.
 
 dem_studyarea_scaled <- terra::rast(here("data", "DEM", "dem_studyarea_scaled.tif"))
-
+plot(dem_studyarea_scaled)
 # Stack aus beiden Rastern
 
 rsf_stack <- c(cand_Landcover_aligned, dem_studyarea_scaled)
@@ -498,6 +527,7 @@ M <- terra::layerCor(rsf_stack, fun = "pearson")
 corrplot(M$correlation, type = "upper", tl.col = "black", tl.srt = 45)
 ```
 
+-> Korrelation sollte auch für die einzelnen Landnutzungsklassen zur Elevation getestet werden, daher legen wir einen Dummie-Datzensatz für die Landnutzungsklassen an und kontrollieren auf Korrelation.
 
 ```{r}
 # 1. Dummy-Raster für jede Landnutzungsklasse erzeugen (1 bis 19)
@@ -527,6 +557,7 @@ corrplot(cor_matrix$correlation, type = "upper", tl.col = "black", tl.srt = 45)
 1. Reduzierung des Datensatz: Die nächstgelegende Aufnahme zu 13 Uhr!
 2. Vorbereitung der KDE (Home Ranges)
 3. Hinzufügen der Random-Points
+
 ```{r}
 #Kontrolle wie viele Datenpunkte pro ID enthalten sind
 table(moose_amt$id)
@@ -568,9 +599,11 @@ kde_randompoints %>%
   select(id, n_random)
 
 ```
+
 ## Umweltvariablen für die Punkte extrahieren
 
-###Ablauftest für ein Individuum zur Vorbereitung einer Funktion
+### Ablauftest für ein Individuum zur Vorbereitung einer Funktion
+
 ```{r}
 
 # 1. Geometrie holen und in sf-Objekt umwandeln
@@ -591,6 +624,7 @@ env_rp_1 <- extract_covariates(rp_track_1, rsf_stack)
 
 
 ### Funktion zur Extraktion der Habitatvariablen (TRUE und Random Points)
+
 ```{r}
 env_all_list <- list()
 
@@ -645,50 +679,11 @@ saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
 #model_glmm <- readRDS("results/model_glmm.rds")
 ```
 ```{r}
-rsf_df_2 <- bind_rows(env_all_list)
-rsf_df_2$case_ <- as.integer(rsf_df$case_) # TRUE/FALSE → 1/0
-rsf_df_2$landcover <- as.factor(rsf_df$landcover)
 
-# Anwednung GLMM
-library(lme4)
-model_glmm_2 <- glmer(case_ ~ elevation + landcover + (1 | id),
-                    data = rsf_df_2,
-                    family = binomial)
-
-summary(model_glmm_2)
-
-
-rsf_stack_2 <- rsf_stack  # Originaldaten beibehalten
-
-# Sicherstellen, dass landcover im Raster als Faktor mit passenden Levels vorliegt
-# 3.1 Hole Modell-Levels
-model_levels <- levels(rsf_df_2$landcover)
-
-# 3.2 Erstelle Lookup-Tabelle für Raster-Faktor
-landcover_levels <- data.frame(
-  value = as.integer(model_levels),  # z. B. 1, 2, 5, ...
-  label = model_levels               # z. B. "1", "2", "5", ...
-)
-
-# 3.3 Raster-Faktor umwandeln und Levels setzen
-rsf_stack_2$landcover <- as.factor(rsf_stack_2$landcover)
-levels(rsf_stack_2$landcover) <- list(landcover_levels)
-
-# 3.4 Werte im Raster prüfen – falls dort Kategorien vorkommen, die im Modell nicht enthalten sind, auf NA setzen
-known_vals <- as.integer(model_levels)
-rsf_stack_2$landcover[!(rsf_stack_2$landcover %in% known_vals)] <- NA
-
-# ------------------------------
-# 4. Vorhersage mit GLMM 2
-# ------------------------------
-moose_pred_logit_2 <- terra::predict(
-  object = rsf_stack_2,
-  model = model_glmm_2,
-  type = "response"
-)
 ```
 
 # Visualisierung der Ergebnisse
+
 ```{r}
 # 1. Effekt-Koeffizienten extrahieren
 coefs <- summary(model_glmm)$coefficients %>%
@@ -719,45 +714,7 @@ ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
     text = element_text(color = "black")
   )
 
-ggsave("Output/RSF-Model Values.png", width = 8, height = 6, dpi = 300)
-```
-
-```{r}
-moose_prob  <- function(var2) {1/ (1 + exp(x = -var2))}  # inverse logit
-
-moose_pred_logit <- terra::predict(object = rsf_stack, model = model_glmm, type = "response")
-
-
-```
-
-## the prediction is made on logit scale
-moose_pred_logit <- terra::predict(object = rsf_stack, 
-                                model = model_glmm)
-
-## transform logit to probability (use inverse logit function above)
-fox_pred_prob <- f_prob(fox_pred_logit)
-```
-
-
-```{r}
-# plot map
-terra::plot(fox_pred_prob, col = viridis(100) )
-terra::plot(water_raster, col = "darkslategray1",  legend=FALSE, add = TRUE)
-
-```
-
-```{r}
-ranef_df <- ranef(model_glmm)$id %>%
-  tibble::rownames_to_column("id") %>%
-  rename(intercept = `(Intercept)`)
-
-ggplot(ranef_df, aes(x = reorder(id, intercept), y = intercept)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(x = "Individuum (ID)", y = "Zufälliger Interzept",
-       title = "Individuelle Abweichung im RSF (Random Intercepts)") +
-  theme_minimal()
-
+#ggsave("Output/RSF-Model Values.png", width = 8, height = 6, dpi = 300)
 ```
 
 

@@ -376,6 +376,21 @@ wrap_plots(kde_plots$plot) +
   plot_layout(ncol = 6) +
   plot_annotation(title = "KDEs of Individuals", 
                   theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
+
+# KDE-Plot zusammensetzen
+kde_plot_combined <- wrap_plots(kde_plots$plot) + 
+  plot_layout(ncol = 6) +
+  plot_annotation(
+    title = "KDEs of Individuals",
+    theme = theme(plot.title = element_text(size = 16, hjust = 0.5))
+  )
+
+# Speichern
+ggsave(
+  filename = here("Output", "KDE pro Tier (männchen und weibchen).png"),
+  plot = kde_plot_combined,
+  width = 12, height = 8, dpi = 300
+)
 ```
 
 # Plotten der KDE Übersicht mit Hintergrundkarte

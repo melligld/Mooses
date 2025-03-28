@@ -484,7 +484,7 @@ Der folgende Code-Chunk ist nicht auszuführen, da der Datensatz zu groß für d
 #bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
 
 #cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
-freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
 #plot(cand_Landcover_studyarea_3979)
 
 # Speichern der Datei für weitere Arbeitsschritte 
@@ -524,8 +524,18 @@ landcover_classes <- data.frame(
   )
 )
 
-
+# Plot BEIM geöffneten Gerät ausführen
 plot(cand_Landcover_studyarea_3979)
+```
+
+
+```{r save-landcover-png, include=FALSE}
+png(
+  filename = here::here("Output", "cand_Landcover_studyarea_3979.png"),
+  width = 3000, height = 2000, res = 300
+)
+plot(cand_Landcover_studyarea_3979)
+dev.off()
 ```
 
 # DEM Kanda
@@ -640,10 +650,87 @@ names(rsf_stack) <- c("landcover", "elevation")
 # Kontrolle
 
 plot(rsf_stack)
-
 ```
 
 
+## Plot Erstellung des Stacks für die Abgabe
+
+```{r}
+# Nur vorkommende Klassen extrahieren
+vals <- sort(unique(na.omit(values(cand_Landcover_studyarea_3979))))
+
+# Als Faktor umwandeln
+landcover_factor <- as.factor(rsf_stack$landcover)
+
+# Labels setzen + Umbrüche einfügen
+insert_linebreak <- function(label, width = 28) {
+  sapply(label, function(x) {
+    paste(strwrap(x, width = width), collapse = "\n")
+  })
+}
+
+landcover_labels <- landcover_classes %>%
+  filter(code %in% vals) %>%
+  arrange(code) %>%
+  mutate(label = insert_linebreak(class, width = 28))
+
+levels(landcover_factor) <- data.frame(
+  value = landcover_labels$code,
+  label = landcover_labels$label
+)
+
+# Farbdefinition (bereits passend)
+landcover_colors <- c(
+  "1"  = "#1b7837",  "2"  = "#5aaE61",  "5"  = "#a6d96a",
+  "6"  = "#66bd63",  "8"  = "#d9ef8b",  "10" = "#fee08b",
+  "11" = "#cccccc",  "12" = "#e6e6e6",  "14" = "#a6cee3",
+  "15" = "#fdbf6f",  "16" = "#f5f5dc",  "17" = "#b2182b",
+  "18" = "#377eb8",  "19" = "#ffffff"
+)
+
+# Farben als Vektor ohne Namen und in Kleinschreibung
+landcover_plot_colors <- tolower(unname(landcover_colors[as.character(vals)]))
+elevation_colors <- terrain.colors(100)
+
+# Neuen Stack erstellen
+rsf_stack_colored <- c(landcover_factor, rsf_stack$elevation)
+names(rsf_stack_colored) <- c("landcover", "elevation")
+
+# Vorschau im Report (nicht exportiert)
+plot(
+  rsf_stack_colored,
+  mar = list(c(8, 10, 10, 18), c(8, 10, 10, 6)),
+  legend = TRUE,
+  plg = list(cex = 0.7),
+  cex = 0.6,
+  axes = TRUE,
+  smooth = FALSE
+)
+
+```
+
+```{r save-rsf-stack, include=FALSE}
+# PNG export mit hoher Auflösung
+png(here::here("Output", "rsf_stack_colored_export.png"),
+    width = 4600, height = 3000, res = 300)
+
+# Plot
+plot(
+  rsf_stack_colored,
+  mar = list(
+    c(6, 8, 4, 18),  # mar für Landcover (oben weniger, unten mehr)
+    c(10, 8, 8, 6)   # mar für Elevation (oben mehr → schafft Abstand)
+  ),
+  legend = TRUE,
+  plg = list(cex = 1.1),  # ← das ist der korrekte Weg für kleine Legendentexte
+  cex = 0.8,
+  axes = TRUE,
+  smooth = FALSE
+)
+
+# Grafik schließen
+dev.off()
+```
 
 ## Kontrolle auf Korrelation 
 

@@ -486,16 +486,40 @@ plot(rsf_stack)
 ```
 
 ## Kontrolle auf Korrelation 
-(unsicher wie nötig dieser Test hier ist)
 
 ```{r}
 library(corrplot)
+
 
 # Korrelation berechnen
 M <- terra::layerCor(rsf_stack, fun = "pearson")
 
 # Plot der Korrelationsmatrix
 corrplot(M$correlation, type = "upper", tl.col = "black", tl.srt = 45)
+```
+
+
+```{r}
+# 1. Dummy-Raster für jede Landnutzungsklasse erzeugen (1 bis 19)
+landcover_dummies <- lapply(1:19, function(k) rsf_stack[["landcover"]] == k)
+
+# 2. Benennen der Layer
+names(landcover_dummies) <- paste0("lc_", 1:19)
+
+# 3. Als SpatRaster zusammenführen
+landcover_stack <- terra::rast(landcover_dummies)
+
+# 4. Elevation anhängen
+lc_env_stack <- c(landcover_stack, rsf_stack[["elevation"]])
+names(lc_env_stack)[20] <- "elevation"  # Sauber benennen
+
+# 5. Korrelation berechnen
+cor_matrix <- terra::layerCor(lc_env_stack, fun = "pearson")
+
+# 6. Optional: Visualisierung
+library(corrplot)
+corrplot(cor_matrix$correlation, type = "upper", tl.col = "black", tl.srt = 45)
+
 ```
 
 ## Vorbereitung zur Erstellung der Random-Points
@@ -620,6 +644,49 @@ saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
 # Einlesen bei späterer Nutzung
 #model_glmm <- readRDS("results/model_glmm.rds")
 ```
+```{r}
+rsf_df_2 <- bind_rows(env_all_list)
+rsf_df_2$case_ <- as.integer(rsf_df$case_) # TRUE/FALSE → 1/0
+rsf_df_2$landcover <- as.factor(rsf_df$landcover)
+
+# Anwednung GLMM
+library(lme4)
+model_glmm_2 <- glmer(case_ ~ elevation + landcover + (1 | id),
+                    data = rsf_df_2,
+                    family = binomial)
+
+summary(model_glmm_2)
+
+
+rsf_stack_2 <- rsf_stack  # Originaldaten beibehalten
+
+# Sicherstellen, dass landcover im Raster als Faktor mit passenden Levels vorliegt
+# 3.1 Hole Modell-Levels
+model_levels <- levels(rsf_df_2$landcover)
+
+# 3.2 Erstelle Lookup-Tabelle für Raster-Faktor
+landcover_levels <- data.frame(
+  value = as.integer(model_levels),  # z. B. 1, 2, 5, ...
+  label = model_levels               # z. B. "1", "2", "5", ...
+)
+
+# 3.3 Raster-Faktor umwandeln und Levels setzen
+rsf_stack_2$landcover <- as.factor(rsf_stack_2$landcover)
+levels(rsf_stack_2$landcover) <- list(landcover_levels)
+
+# 3.4 Werte im Raster prüfen – falls dort Kategorien vorkommen, die im Modell nicht enthalten sind, auf NA setzen
+known_vals <- as.integer(model_levels)
+rsf_stack_2$landcover[!(rsf_stack_2$landcover %in% known_vals)] <- NA
+
+# ------------------------------
+# 4. Vorhersage mit GLMM 2
+# ------------------------------
+moose_pred_logit_2 <- terra::predict(
+  object = rsf_stack_2,
+  model = model_glmm_2,
+  type = "response"
+)
+```
 
 # Visualisierung der Ergebnisse
 ```{r}
@@ -639,15 +706,44 @@ coefs <- summary(model_glmm)$coefficients %>%
 
 # 2. Plot
 ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(color = "black") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
   coord_flip() +
-  labs(x = "Variable", y = "Effekt (log-Odds)",
-       title = "RSF-Modell: Effekte von Höhe & Landnutzung") +
-  theme_minimal()
+  labs(x = "Variable", y = "Effect (log-Odds)",
+       title = "RSF-Model: Effects of Elevation and Landcover") +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    text = element_text(color = "black")
+  )
 
-ggsave("RSF Model Values.png", width = 8, height = 6, dpi = 300)
+ggsave("Output/RSF-Model Values.png", width = 8, height = 6, dpi = 300)
+```
+
+```{r}
+moose_prob  <- function(var2) {1/ (1 + exp(x = -var2))}  # inverse logit
+
+moose_pred_logit <- terra::predict(object = rsf_stack, model = model_glmm, type = "response")
+
+
+```
+
+## the prediction is made on logit scale
+moose_pred_logit <- terra::predict(object = rsf_stack, 
+                                model = model_glmm)
+
+## transform logit to probability (use inverse logit function above)
+fox_pred_prob <- f_prob(fox_pred_logit)
+```
+
+
+```{r}
+# plot map
+terra::plot(fox_pred_prob, col = viridis(100) )
+terra::plot(water_raster, col = "darkslategray1",  legend=FALSE, add = TRUE)
+
 ```
 
 ```{r}

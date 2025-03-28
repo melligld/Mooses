@@ -325,6 +325,105 @@ wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ```
 
+
+```{r}
+#Plotten der KDEs
+
+kde_results_sex <- kde_results %>%
+  left_join(sex %>%
+              select(id, animal.sex), by = "id")
+
+# Vorher sicherstellen, dass moose_proj eine gültige CRS hat                    ##nicht nötig?!
+#if (is.na(st_crs(moose_proj))) {
+#  st_crs(moose_proj) <- 3979  # Falls CRS nicht definiert ist
+#}
+
+# KDE in sf umwandeln
+kde_results_sex <- kde_results_sex %>%
+  mutate(kde_results = map(kde, ~ hr_isopleths(.x)))
+
+kde_results_sex <- kde_results_sex %>%
+  mutate(kde_results = map(kde_results, ~ st_set_crs(.x, 3979)))
+
+# 1. Berechne Bounding Box (BBox) für jeden KDE
+kde_results_sex <- kde_results_sex %>%
+  mutate(bbox = map(kde_results, st_bbox)) %>%
+  mutate(x_range = map_dbl(bbox, ~ .x["xmax"] - .x["xmin"]),
+         y_range = map_dbl(bbox, ~ .x["ymax"] - .x["ymin"]))
+
+# 2. Bestimme die maximalen Spannweiten
+max_x_range <- max(kde_results_sex$x_range)
+max_y_range <- max(kde_results_sex$y_range)
+
+# KDEs mit angepasster Skalierung und Farbgebung plotten
+kde_plots <- kde_results_sex %>%
+  mutate(plot = pmap(list(kde_results, bbox, id, animal.sex), function(kde, bbox, id, sex) {
+    # Mittelpunkt berechnen
+    x_center <- (bbox["xmax"] + bbox["xmin"]) / 2
+    y_center <- (bbox["ymax"] + bbox["ymin"]) / 2
+    
+    # KDE einfärben nach Geschlecht
+    ggplot() +
+      geom_sf(data = kde, aes(fill = sex), alpha = 1) +  # KDE nach Geschlecht färben
+      scale_fill_manual(values = c("f" = "lightblue", "m" = "pink")) +  # Farben für f und m
+      ggtitle(paste("ID", id)) +
+      xlim(x_center - max_x_range / 2, x_center + max_x_range / 2) +
+      ylim(y_center - max_y_range / 2, y_center + max_y_range / 2) +
+      theme_minimal() +
+      theme(axis.text = element_blank(),
+            axis.ticks = element_blank(),
+            axis.title = element_blank(),
+            legend.position = "none")  # Verhindert die Legende in jedem einzelnen Plot
+  }))
+
+# 4. Plots in Rasteransicht darstellen mit einer einzigen Legende
+wrap_plots(kde_plots$plot) + 
+  plot_layout(ncol = 6) +
+  plot_annotation(title = "KDEs of Individuals", 
+                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5))) +
+  # Eine einzelne Legende hinzufügen
+  guide_area() +
+  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "animal.sex")  # Legende nur einmal erstellen
+
+
+
+```
+```{r}
+#Übersichtskarte mit hintergrund
+library(ggplot2)
+library(sf)
+library(dplyr)
+library(purrr)
+
+# Umwandlung der KDE in Isoplethen (Polygone) und Zuordnung von Geschlecht
+kde_results_sex <- kde_results_sex %>%
+  mutate(kde_isopleths = map(kde, ~ hr_isopleths(.x)))
+
+# Konvertierung der Isoplethen in sf-Objekte und Hinzufügen des Geschlechts
+kde_results_sf <- kde_results_sex %>%
+  mutate(kde_sf = map2(kde_isopleths, animal.sex, function(kde, sex) {
+    kde_sf <- st_as_sf(kde)  # Konvertiert KDE in sf-Objekt
+    kde_sf$sex <- sex        # Fügt das Geschlecht als Spalte hinzu
+    return(kde_sf)
+  }))
+
+# Alle sf-Objekte zusammenführen
+kde_all_sf <- do.call(rbind, kde_results_sf$kde_sf)
+
+# Plot der gesamten KDEs auf einer Karte mit Geschlechtsfärbung
+ggplot() +
+  geom_sf(data = kde_all_sf, aes(fill = factor(sex)), color = "blue", alpha = 0.5) +  # Geschlecht färben
+  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "Sex") +  # Farben für Geschlecht
+  theme_minimal() +
+  theme(axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        axis.title = element_blank()) +
+  ggtitle("KDE Results of All Individuals by Sex")
+
+
+```
+
+
 # Landcover Daten
 
 ## Kurzinfo zum Datensatz:

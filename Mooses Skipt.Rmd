@@ -328,6 +328,24 @@ boxplot(area ~ animal.sex, data = moose_data_sex_area,
 hist(moose_data_sex_area$area)
 wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
+
+#Gesamtfläche pro Geschlecht berechnen
+total_area_by_sex <- moose_data_sex_area %>%
+   group_by(animal.sex) %>%
+   summarise(total_area_km2 = sum(area, na.rm = TRUE))
+ 
+#Ausgabe: Tabelle & Klartext
+print(total_area_by_sex)
+ 
+ 
+#Durchschnittliche Home Range Fläche pro Geschlecht
+mean_area_by_sex <- moose_data_sex_area %>%
+   group_by(animal.sex) %>%
+   summarise(mean_area_km2 = mean(area, na.rm = TRUE))
+ 
+#Ausgabe
+print(mean_area_by_sex)
+
 ```
 
 # Plotten der KDEs

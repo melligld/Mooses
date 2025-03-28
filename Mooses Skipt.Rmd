@@ -240,7 +240,7 @@ ggplot() +
   theme_minimal()
 ```
 
-# Kernel desity estimation
+# Kernel density estimation
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen
@@ -408,12 +408,15 @@ kde_all_sf <- do.call(rbind, kde_results_sf$kde_sf)
 st_crs(kde_all_sf) <- 3979
 kde_all_sf_wgs84 <- st_transform(kde_all_sf, crs = 4326)
 
-# Create a leaflet map with satellite imagery
+# Karte erstellen
 m <- leaflet() %>%
-  addProviderTiles("Esri.WorldImagery") %>%  # Add Esri satellite imagery
-  setView(lat = 53.5, lng = -119.55, zoom = 7.2)  # Set initial view
-# Hinzufügen der KDEs
+  addProviderTiles("Esri.WorldTopoMap") %>%
+  setView(lat = 53.5, lng = -119.55, zoom = 7.2)
+
+# Farbe nach Geschlecht
 pal <- colorFactor(c("lightblue", "pink"), domain = kde_all_sf_wgs84$sex)
+
+# KDEs einfügen
 m <- m %>%
   addPolygons(
     data = kde_all_sf_wgs84,
@@ -423,7 +426,17 @@ m <- m %>%
     weight = 1,
     label = ~paste("Sex: ", sex)
   )
-# Legende Einfügen
+
+# Bounding Box (Puffer) einfügen
+m <- m %>%
+  addPolygons(
+    data = bbox_puffer_wgs,
+    color = "red",
+    weight = 2,
+    fill = FALSE
+  )
+
+# Legende
 m <- m %>%
   addLegend(
     "bottomright",
@@ -432,7 +445,8 @@ m <- m %>%
     title = "Sex",
     opacity = 0.7
   )
-# Karte anzeigen lassen
+
+# anzeigen
 m
 ```
 
@@ -598,8 +612,6 @@ dem_studyarea_3979 <- terra::rast(here("data", "DEM", "dem_studyarea_3979.tif"))
 
 # Plot zur Kontrolle
 plot(dem_studyarea_3979)
-
-
 ```
 
 # Resource selection function
@@ -718,7 +730,6 @@ dev.off()
 
 ```{r}
 library(corrplot)
-
 
 # Korrelation berechnen
 M <- terra::layerCor(rsf_stack, fun = "pearson")
@@ -873,14 +884,12 @@ model_glmm <- glmer(case_ ~ elevation + as.factor(landcover) + (1 | id),
 summary(model_glmm)
 
 # Speichern des fertigen GLMM-Objekts
-saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
+#saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
 
 # Einlesen bei späterer Nutzung
 #model_glmm <- readRDS("results/model_glmm.rds")
 ```
-```{r}
 
-```
 
 # Visualisierung der Ergebnisse
 

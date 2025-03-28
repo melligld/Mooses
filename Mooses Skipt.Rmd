@@ -15,6 +15,11 @@ library(tidyverse)
 library(sf)
 library(amt)
 library(terra)
+library(dplyr)
+library(leaflet)
+library(mapview)
+library(webshot)
+library(patchwork)
 ```
 
 # Pfad automatisch setzen 
@@ -325,44 +330,34 @@ wilcox.test(as.numeric(moose_data_sex_area$area)~moose_data_sex_area$animal.sex)
 
 ```
 
+# Plotten der KDEs
 
 ```{r}
 #Plotten der KDEs
-
+# KDE in sf umwandeln und sex hinzufügen
 kde_results_sex <- kde_results %>%
-  left_join(sex %>%
-              select(id, animal.sex), by = "id")
-
-# Vorher sicherstellen, dass moose_proj eine gültige CRS hat                    ##nicht nötig?!
-#if (is.na(st_crs(moose_proj))) {
-#  st_crs(moose_proj) <- 3979  # Falls CRS nicht definiert ist
-#}
-
-# KDE in sf umwandeln
+  left_join(sex %>% select(id, animal.sex), by = "id")
 kde_results_sex <- kde_results_sex %>%
   mutate(kde_results = map(kde, ~ hr_isopleths(.x)))
-
 kde_results_sex <- kde_results_sex %>%
   mutate(kde_results = map(kde_results, ~ st_set_crs(.x, 3979)))
 
-# 1. Berechne Bounding Box (BBox) für jeden KDE
+# 1. Berechnung Bounding Box für jeden KDE, zur Skalierung der Darstellung
 kde_results_sex <- kde_results_sex %>%
   mutate(bbox = map(kde_results, st_bbox)) %>%
   mutate(x_range = map_dbl(bbox, ~ .x["xmax"] - .x["xmin"]),
          y_range = map_dbl(bbox, ~ .x["ymax"] - .x["ymin"]))
-
-# 2. Bestimme die maximalen Spannweiten
+# 2. Bestimme die maximalen Spannweiten 
 max_x_range <- max(kde_results_sex$x_range)
 max_y_range <- max(kde_results_sex$y_range)
 
 # KDEs mit angepasster Skalierung und Farbgebung plotten
 kde_plots <- kde_results_sex %>%
   mutate(plot = pmap(list(kde_results, bbox, id, animal.sex), function(kde, bbox, id, sex) {
-    # Mittelpunkt berechnen
+
     x_center <- (bbox["xmax"] + bbox["xmin"]) / 2
     y_center <- (bbox["ymax"] + bbox["ymin"]) / 2
     
-    # KDE einfärben nach Geschlecht
     ggplot() +
       geom_sf(data = kde, aes(fill = sex), alpha = 1) +  # KDE nach Geschlecht färben
       scale_fill_manual(values = c("f" = "lightblue", "m" = "pink")) +  # Farben für f und m
@@ -373,56 +368,58 @@ kde_plots <- kde_results_sex %>%
       theme(axis.text = element_blank(),
             axis.ticks = element_blank(),
             axis.title = element_blank(),
-            legend.position = "none")  # Verhindert die Legende in jedem einzelnen Plot
+            legend.position = "none")
   }))
 
 # 4. Plots in Rasteransicht darstellen mit einer einzigen Legende
 wrap_plots(kde_plots$plot) + 
   plot_layout(ncol = 6) +
   plot_annotation(title = "KDEs of Individuals", 
-                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5))) +
-  # Eine einzelne Legende hinzufügen
-  guide_area() +
-  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "animal.sex")  # Legende nur einmal erstellen
-
-
-
+                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
 ```
+
+# Plotten der KDE Übersicht mit Hintergrundkarte
+
 ```{r}
-#Übersichtskarte mit hintergrund
-library(ggplot2)
-library(sf)
-library(dplyr)
-library(purrr)
-
-# Umwandlung der KDE in Isoplethen (Polygone) und Zuordnung von Geschlecht
-kde_results_sex <- kde_results_sex %>%
-  mutate(kde_isopleths = map(kde, ~ hr_isopleths(.x)))
-
-# Konvertierung der Isoplethen in sf-Objekte und Hinzufügen des Geschlechts
+# Transform the CRS to WGS 84
 kde_results_sf <- kde_results_sex %>%
-  mutate(kde_sf = map2(kde_isopleths, animal.sex, function(kde, sex) {
+  mutate(kde_sf = map2(kde_results, animal.sex, function(kde, sex) {
     kde_sf <- st_as_sf(kde)  # Konvertiert KDE in sf-Objekt
     kde_sf$sex <- sex        # Fügt das Geschlecht als Spalte hinzu
     return(kde_sf)
   }))
 
-# Alle sf-Objekte zusammenführen
 kde_all_sf <- do.call(rbind, kde_results_sf$kde_sf)
+st_crs(kde_all_sf) <- 3979
+kde_all_sf_wgs84 <- st_transform(kde_all_sf, crs = 4326)
 
-# Plot der gesamten KDEs auf einer Karte mit Geschlechtsfärbung
-ggplot() +
-  geom_sf(data = kde_all_sf, aes(fill = factor(sex)), color = "blue", alpha = 0.5) +  # Geschlecht färben
-  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "Sex") +  # Farben für Geschlecht
-  theme_minimal() +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank()) +
-  ggtitle("KDE Results of All Individuals by Sex")
-
-
+# Create a leaflet map with satellite imagery
+m <- leaflet() %>%
+  addProviderTiles("Esri.WorldImagery") %>%  # Add Esri satellite imagery
+  setView(lat = 53.5, lng = -119.55, zoom = 7.2)  # Set initial view
+# Hinzufügen der KDEs
+pal <- colorFactor(c("lightblue", "pink"), domain = kde_all_sf_wgs84$sex)
+m <- m %>%
+  addPolygons(
+    data = kde_all_sf_wgs84,
+    fillColor = ~pal(sex),
+    fillOpacity = 0.7,
+    color = "black",
+    weight = 1,
+    label = ~paste("Sex: ", sex)
+  )
+# Legende Einfügen
+m <- m %>%
+  addLegend(
+    "bottomright",
+    colors = c("lightblue", "pink"),
+    labels = c("f", "m"),
+    title = "Sex",
+    opacity = 0.7
+  )
+# Karte anzeigen lassen
+m
 ```
-
 
 # Landcover Daten
 
@@ -454,7 +451,7 @@ Der folgende Code-Chunk ist nicht auszuführen, da der Datensatz zu groß für d
 #bbox_sf_proj <- st_transform(bbox_puffer, crs(cand_Landcover_3979))
 
 #cand_Landcover_studyarea_3979 <- crop(cand_Landcover_3979, bbox_sf_proj)
-#freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
+freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Landnutzungsklassen)
 #plot(cand_Landcover_studyarea_3979)
 
 # Speichern der Datei für weitere Arbeitsschritte 
@@ -612,6 +609,8 @@ names(rsf_stack) <- c("landcover", "elevation")
 plot(rsf_stack)
 
 ```
+
+
 
 ## Kontrolle auf Korrelation 
 

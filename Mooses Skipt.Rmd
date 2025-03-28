@@ -5,6 +5,7 @@ date: "2025-03-23"
 ---
 
 # Pakete laden
+
 ```{r}
 library(here)
 library(readr)
@@ -14,15 +15,24 @@ library(tidyverse)
 library(sf)
 library(amt)
 library(terra)
+library(dplyr)
+library(leaflet)
+library(mapview)
+library(webshot)
+library(patchwork)
 ```
 
 # Pfad automatisch setzen 
+
+GitHub Ordnerstruktur
 
 ```{r}
 here::here()
 ```
 
-# Git Installieren:
+# Vorbereitung Gruppenarbeit Workflow
+
+## Git Installieren:
 
 Git Programm herunterladen: 
 https://git-scm.com/downloads
@@ -87,9 +97,9 @@ git push     → Änderungen ins GitHub-Projekt hochladen
 ➤ Immer vor dem Arbeiten zuerst ein `pull` machen.
 ➤ Nur pushen, wenn du committed hast und keine Konflikte offen sind.
 
+# GPS Telemetry Daten (Elche)
 
-
-# Alle CSVs einlesen und zusammenfügen 
+## Alle CSVs einlesen und zusammenfügen 
 
 ```{r}
 # Ordnerpfad zu den CSV-Dateien
@@ -111,7 +121,9 @@ moose_data_sex1 <- moose_data %>%
   left_join(sex[, c("id", "animal.sex")], by = "id")
 
 ```
-##Datensatz "beschneiden"
+
+## Datensatz "beschneiden"
+
 ```{r}
 #1. Gruppe A (Datenerhebungszeitraum 2008-2009) in eigenen Datensatz 
 moose_A <- moose_data_sex1[moose_data_sex1$id %in% c("1", "3", "5", "10"), ]
@@ -133,17 +145,16 @@ head(moose_comb)
 sex<- sex[!sex$id %in% c("31", "9"), ]
 ```
 
-
-
-## Anzeigen lassen welche Dateien drin sind
+## Datenüberblick
 
 ```{r}
 glimpse(moose_data)
 unique(moose_data$source_file)
-
+skim(moose_data)
 ```
 
-## Spalten vereinfachen und umbennen und NA raus löschen
+## 1. Datenbereinigung und Vorbereitung
+
 ```{r}
 moose_data_sex <- moose_comb %>%
   rename(
@@ -157,18 +168,34 @@ moose_data_sex <- moose_data_sex %>%
   filter(!is.na(lon))
 ```
 
-```{r}
 ## Aufnahmezeitraum anschauen
+
+```{r}
+# Gesamter Datensatz
+moose_data$yearday <- yday(moose_data$timestamp)
+moose_data$month   <- month(moose_data$timestamp)
+moose_data$hour    <- hour(moose_data$timestamp)
+moose_data$kweek   <- week(moose_data$timestamp)
+moose_data$date    <- date(moose_data$timestamp)
+
+ggplot(moose_data, aes(date)) +
+  geom_bar() +
+  theme_bw()
+
+ggsave("Output/moose_complete_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
+
+# Bereinigter Datensatz
 moose_data_sex$yearday <- yday(moose_data_sex$time)
 moose_data_sex$month   <- month(moose_data_sex$time)
 moose_data_sex$hour    <- hour(moose_data_sex$time)
 moose_data_sex$kweek   <- week(moose_data_sex$time)
 moose_data_sex$date    <- date(moose_data_sex$time)
+
 ggplot(moose_data_sex, aes(date)) +
   geom_bar() +
   theme_bw()
-ggsave("Output/moose_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 
+ggsave("Output/moose_adjusted_timestamp_histogram.png", width = 10, height = 6, dpi = 300)
 ```
 
 ## Erste Bewegung visualisieren 
@@ -189,7 +216,9 @@ ggplot(moose_data_sex, aes(x = lon, y = lat, color = factor(id))) +
 
 ```
 
+## Untersuchungsgebiet festlegen
 
+Zu einfacheren Bearbeitung der Habitatvariablen legen wir ein UG anhand der GPS-Punkte fest.
 ```{r}
 # Daten in sf-Objekt umwandeln (WGS84-Koordinatensystem)
 moose_sf <- st_as_sf(moose_data_sex, coords = c("lon", "lat"), crs = 4326)
@@ -210,6 +239,8 @@ ggplot() +
   geom_sf(data = moose_proj, color = "blue", size = 0.5) +
   theme_minimal()
 ```
+
+# Kernel desity estimation
 
 ```{r}
 #1. Dataframe mit Koordinaten erstellen
@@ -271,6 +302,8 @@ kde_moose12_kde <- kde_moose12$kde[[1]]
 kde_area_moose12 <- hr_area(kde_moose12_kde)
 ```
 
+## Vergleich KDE Weibchen / Männchen
+
 ```{r}
 #Neuen Datensatz erstellen mit Flächenangaben und Geschlecht für Visualisierung ect.
 #Sex datensatz als basis- alle Spalten mit nur NA entfernen
@@ -315,44 +348,34 @@ print(mean_area_by_sex)
 
 ```
 
+# Plotten der KDEs
 
 ```{r}
 #Plotten der KDEs
-
+# KDE in sf umwandeln und sex hinzufügen
 kde_results_sex <- kde_results %>%
-  left_join(sex %>%
-              select(id, animal.sex), by = "id")
-
-# Vorher sicherstellen, dass moose_proj eine gültige CRS hat                    ##nicht nötig?!
-#if (is.na(st_crs(moose_proj))) {
-#  st_crs(moose_proj) <- 3979  # Falls CRS nicht definiert ist
-#}
-
-# KDE in sf umwandeln
+  left_join(sex %>% select(id, animal.sex), by = "id")
 kde_results_sex <- kde_results_sex %>%
   mutate(kde_results = map(kde, ~ hr_isopleths(.x)))
-
 kde_results_sex <- kde_results_sex %>%
   mutate(kde_results = map(kde_results, ~ st_set_crs(.x, 3979)))
 
-# 1. Berechne Bounding Box (BBox) für jeden KDE
+# 1. Berechnung Bounding Box für jeden KDE, zur Skalierung der Darstellung
 kde_results_sex <- kde_results_sex %>%
   mutate(bbox = map(kde_results, st_bbox)) %>%
   mutate(x_range = map_dbl(bbox, ~ .x["xmax"] - .x["xmin"]),
          y_range = map_dbl(bbox, ~ .x["ymax"] - .x["ymin"]))
-
-# 2. Bestimme die maximalen Spannweiten
+# 2. Bestimme die maximalen Spannweiten 
 max_x_range <- max(kde_results_sex$x_range)
 max_y_range <- max(kde_results_sex$y_range)
 
 # KDEs mit angepasster Skalierung und Farbgebung plotten
 kde_plots <- kde_results_sex %>%
   mutate(plot = pmap(list(kde_results, bbox, id, animal.sex), function(kde, bbox, id, sex) {
-    # Mittelpunkt berechnen
+
     x_center <- (bbox["xmax"] + bbox["xmin"]) / 2
     y_center <- (bbox["ymax"] + bbox["ymin"]) / 2
     
-    # KDE einfärben nach Geschlecht
     ggplot() +
       geom_sf(data = kde, aes(fill = sex), alpha = 1) +  # KDE nach Geschlecht färben
       scale_fill_manual(values = c("f" = "lightblue", "m" = "pink")) +  # Farben für f und m
@@ -363,56 +386,58 @@ kde_plots <- kde_results_sex %>%
       theme(axis.text = element_blank(),
             axis.ticks = element_blank(),
             axis.title = element_blank(),
-            legend.position = "none")  # Verhindert die Legende in jedem einzelnen Plot
+            legend.position = "none")
   }))
 
 # 4. Plots in Rasteransicht darstellen mit einer einzigen Legende
 wrap_plots(kde_plots$plot) + 
   plot_layout(ncol = 6) +
   plot_annotation(title = "KDEs of Individuals", 
-                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5))) +
-  # Eine einzelne Legende hinzufügen
-  guide_area() +
-  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "animal.sex")  # Legende nur einmal erstellen
-
-
-
+                  theme = theme(plot.title = element_text(size = 16, hjust = 0.5)))
 ```
+
+# Plotten der KDE Übersicht mit Hintergrundkarte
+
 ```{r}
-#Übersichtskarte mit hintergrund
-library(ggplot2)
-library(sf)
-library(dplyr)
-library(purrr)
-
-# Umwandlung der KDE in Isoplethen (Polygone) und Zuordnung von Geschlecht
-kde_results_sex <- kde_results_sex %>%
-  mutate(kde_isopleths = map(kde, ~ hr_isopleths(.x)))
-
-# Konvertierung der Isoplethen in sf-Objekte und Hinzufügen des Geschlechts
+# Transform the CRS to WGS 84
 kde_results_sf <- kde_results_sex %>%
-  mutate(kde_sf = map2(kde_isopleths, animal.sex, function(kde, sex) {
+  mutate(kde_sf = map2(kde_results, animal.sex, function(kde, sex) {
     kde_sf <- st_as_sf(kde)  # Konvertiert KDE in sf-Objekt
     kde_sf$sex <- sex        # Fügt das Geschlecht als Spalte hinzu
     return(kde_sf)
   }))
 
-# Alle sf-Objekte zusammenführen
 kde_all_sf <- do.call(rbind, kde_results_sf$kde_sf)
+st_crs(kde_all_sf) <- 3979
+kde_all_sf_wgs84 <- st_transform(kde_all_sf, crs = 4326)
 
-# Plot der gesamten KDEs auf einer Karte mit Geschlechtsfärbung
-ggplot() +
-  geom_sf(data = kde_all_sf, aes(fill = factor(sex)), color = "blue", alpha = 0.5) +  # Geschlecht färben
-  scale_fill_manual(values = c("f" = "lightblue", "m" = "pink"), name = "Sex") +  # Farben für Geschlecht
-  theme_minimal() +
-  theme(axis.text = element_blank(),
-        axis.ticks = element_blank(),
-        axis.title = element_blank()) +
-  ggtitle("KDE Results of All Individuals by Sex")
-
-
+# Create a leaflet map with satellite imagery
+m <- leaflet() %>%
+  addProviderTiles("Esri.WorldImagery") %>%  # Add Esri satellite imagery
+  setView(lat = 53.5, lng = -119.55, zoom = 7.2)  # Set initial view
+# Hinzufügen der KDEs
+pal <- colorFactor(c("lightblue", "pink"), domain = kde_all_sf_wgs84$sex)
+m <- m %>%
+  addPolygons(
+    data = kde_all_sf_wgs84,
+    fillColor = ~pal(sex),
+    fillOpacity = 0.7,
+    color = "black",
+    weight = 1,
+    label = ~paste("Sex: ", sex)
+  )
+# Legende Einfügen
+m <- m %>%
+  addLegend(
+    "bottomright",
+    colors = c("lightblue", "pink"),
+    labels = c("f", "m"),
+    title = "Sex",
+    opacity = 0.7
+  )
+# Karte anzeigen lassen
+m
 ```
-
 
 # Landcover Daten
 
@@ -453,7 +478,7 @@ freq(cand_Landcover_studyarea_3979) #vllt noch interessant (Häufigkeit der Land
 
 ## Dateiimport GitHub kompatibel
 
-Ab hier kann 
+Ab hier können die Rasterdaten als Zuschnitt auf das Untersuchungsgebiet über das GitHub eingeladen werden. 
 ```{r}
 cand_Landcover_studyarea_3979 <- terra::rast(here("data", "cand_Landcover_studyarea_3979.tif"))
 
@@ -570,7 +595,7 @@ plot(dem_studyarea_3979)
 
 ```
 
-# Resource selection funciton
+# Resource selection function
 
 ## Vorbereitung des Umweltvariablen-Stacks für die RSF
 
@@ -579,6 +604,7 @@ plot(dem_studyarea_3979)
 
 cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_3979, method = "near")
 
+plot(cand_Landcover_aligned)
 # DEM wird standardisiert (z-transformiert) - Auch nicht unbedingt nochmal ausführen.
 # dem_mosaic_scaled <- scale(dem_studyarea_3979)
 # Skalierter DEM wird komprimiert als GeoTIFF gespeichert und erneut eingelesen
@@ -590,7 +616,7 @@ cand_Landcover_aligned <- resample(cand_Landcover_studyarea_3979, dem_studyarea_
 # Datei zu groß für GitHub, kombrimierte Datei manuell downloaden und in Ordnerstruktur einfügen.
 
 dem_studyarea_scaled <- terra::rast(here("data", "DEM", "dem_studyarea_scaled.tif"))
-
+plot(dem_studyarea_scaled)
 # Stack aus beiden Rastern
 
 rsf_stack <- c(cand_Landcover_aligned, dem_studyarea_scaled)
@@ -602,11 +628,13 @@ plot(rsf_stack)
 
 ```
 
+
+
 ## Kontrolle auf Korrelation 
-(unsicher wie nötig dieser Test hier ist)
 
 ```{r}
 library(corrplot)
+
 
 # Korrelation berechnen
 M <- terra::layerCor(rsf_stack, fun = "pearson")
@@ -615,11 +643,37 @@ M <- terra::layerCor(rsf_stack, fun = "pearson")
 corrplot(M$correlation, type = "upper", tl.col = "black", tl.srt = 45)
 ```
 
+-> Korrelation sollte auch für die einzelnen Landnutzungsklassen zur Elevation getestet werden, daher legen wir einen Dummie-Datzensatz für die Landnutzungsklassen an und kontrollieren auf Korrelation.
+
+```{r}
+# 1. Dummy-Raster für jede Landnutzungsklasse erzeugen (1 bis 19)
+landcover_dummies <- lapply(1:19, function(k) rsf_stack[["landcover"]] == k)
+
+# 2. Benennen der Layer
+names(landcover_dummies) <- paste0("lc_", 1:19)
+
+# 3. Als SpatRaster zusammenführen
+landcover_stack <- terra::rast(landcover_dummies)
+
+# 4. Elevation anhängen
+lc_env_stack <- c(landcover_stack, rsf_stack[["elevation"]])
+names(lc_env_stack)[20] <- "elevation"  # Sauber benennen
+
+# 5. Korrelation berechnen
+cor_matrix <- terra::layerCor(lc_env_stack, fun = "pearson")
+
+# 6. Optional: Visualisierung
+library(corrplot)
+corrplot(cor_matrix$correlation, type = "upper", tl.col = "black", tl.srt = 45)
+
+```
+
 ## Vorbereitung zur Erstellung der Random-Points
 
 1. Reduzierung des Datensatz: Die nächstgelegende Aufnahme zu 13 Uhr!
 2. Vorbereitung der KDE (Home Ranges)
 3. Hinzufügen der Random-Points
+
 ```{r}
 #Kontrolle wie viele Datenpunkte pro ID enthalten sind
 table(moose_amt$id)
@@ -661,9 +715,11 @@ kde_randompoints %>%
   select(id, n_random)
 
 ```
+
 ## Umweltvariablen für die Punkte extrahieren
 
-###Ablauftest für ein Individuum zur Vorbereitung einer Funktion
+### Ablauftest für ein Individuum zur Vorbereitung einer Funktion
+
 ```{r}
 
 # 1. Geometrie holen und in sf-Objekt umwandeln
@@ -684,6 +740,7 @@ env_rp_1 <- extract_covariates(rp_track_1, rsf_stack)
 
 
 ### Funktion zur Extraktion der Habitatvariablen (TRUE und Random Points)
+
 ```{r}
 env_all_list <- list()
 
@@ -737,8 +794,12 @@ saveRDS(model_glmm, file = here::here("output", "model_glmm.rds"))
 # Einlesen bei späterer Nutzung
 #model_glmm <- readRDS("results/model_glmm.rds")
 ```
+```{r}
+
+```
 
 # Visualisierung der Ergebnisse
+
 ```{r}
 # 1. Effekt-Koeffizienten extrahieren
 coefs <- summary(model_glmm)$coefficients %>%
@@ -756,29 +817,20 @@ coefs <- summary(model_glmm)$coefficients %>%
 
 # 2. Plot
 ggplot(coefs, aes(x = reorder(class, Estimate), y = Estimate)) +
-  geom_point() +
-  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2) +
-  geom_hline(yintercept = 0, linetype = "dashed") +
+  geom_point(color = "black") +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0.2, color = "black") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey40") +
   coord_flip() +
-  labs(x = "Variable", y = "Effekt (log-Odds)",
-       title = "RSF-Modell: Effekte von Höhe & Landnutzung") +
-  theme_minimal()
+  labs(x = "Variable", y = "Effect (log-Odds)",
+       title = "RSF-Model: Effects of Elevation and Landcover") +
+  theme_minimal() +
+  theme(
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA),
+    text = element_text(color = "black")
+  )
 
-ggsave("RSF Model Values.png", width = 8, height = 6, dpi = 300)
-```
-
-```{r}
-ranef_df <- ranef(model_glmm)$id %>%
-  tibble::rownames_to_column("id") %>%
-  rename(intercept = `(Intercept)`)
-
-ggplot(ranef_df, aes(x = reorder(id, intercept), y = intercept)) +
-  geom_col(fill = "steelblue") +
-  geom_hline(yintercept = 0, linetype = "dashed") +
-  labs(x = "Individuum (ID)", y = "Zufälliger Interzept",
-       title = "Individuelle Abweichung im RSF (Random Intercepts)") +
-  theme_minimal()
-
+#ggsave("Output/RSF-Model Values.png", width = 8, height = 6, dpi = 300)
 ```
 
 
